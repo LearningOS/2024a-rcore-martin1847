@@ -51,10 +51,8 @@ lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
-        let mut tasks = [TaskControlBlock {
-            task_cx: TaskContext::zero_init(),
-            task_status: TaskStatus::UnInit,
-        }; MAX_APP_NUM];
+        let mut tasks: [TaskControlBlock; MAX_APP_NUM] = core::array::from_fn(|_| TaskControlBlock::new());
+        // [TaskControlBlock::new(); MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
@@ -79,7 +77,8 @@ impl TaskManager {
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
-        task0.task_status = TaskStatus::Running;
+        task0.mark_running();
+        // task0.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -121,7 +120,8 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
-            inner.tasks[next].task_status = TaskStatus::Running;
+            inner.tasks[next].mark_running();
+            // inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -168,4 +168,21 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// get the current 'Running' task
+pub fn current_task() -> &'static TaskControlBlock {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    // let task = inner.tasks[current];
+    let task = &inner.tasks[current];
+    // 由于 task 的生命周期与 inner 相同，我们需要确保返回的引用是 'static
+    unsafe { &*(task as *const TaskControlBlock) }
+}
+
+/// inc sys_call for current task , return the times .include this time.
+pub fn inc_task_sys_call(syscall_id: usize) -> u32{
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].inc_sys_call(syscall_id)
 }

@@ -1,8 +1,10 @@
 //! Process management syscalls
+use core::ptr::copy_nonoverlapping;
+
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
-    timer::get_time_us,
+    task::{current_task, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -52,6 +54,21 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info");
-    -1
+    trace!("kernel: sys_task_info ... martin");
+    debug!("kernel TaskInfo {:?}", _ti);
+    let curr_ms = get_time_ms();
+    let task = current_task();
+    let ti = unsafe { _ti.as_mut().unwrap() };
+    ti.time = curr_ms - task.running_at_ms;
+    ti.status = TaskStatus::Running;
+
+    unsafe {
+        copy_nonoverlapping(
+            task.syscall_times.as_ptr(),
+            ti.syscall_times.as_mut_ptr(),
+            task.syscall_times.len(),
+        )
+    };
+    0
+    //-1
 }
