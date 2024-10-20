@@ -1,6 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::config::PAGE_SIZE_BITS;
+
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -174,4 +176,12 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// translated VirtAddr to PhysAddr
+pub fn translated_va_to_pa(token: usize, va_ptr: usize) -> PhysAddr {
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(va_ptr);
+    let ppn = page_table.translate(va.floor()).unwrap().ppn().0;
+    PhysAddr((ppn << PAGE_SIZE_BITS) + va.page_offset())
 }

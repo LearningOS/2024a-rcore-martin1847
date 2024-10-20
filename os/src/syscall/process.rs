@@ -1,9 +1,9 @@
 //! Process management syscalls
+
 use crate::{
-    config::MAX_SYSCALL_NUM,
-    task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
-    },
+    config::MAX_SYSCALL_NUM, mm::translated_va_to_pa, task::{
+        change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
+    }, timer::{get_time_ms, get_time_us}
 };
 
 #[repr(C)]
@@ -43,7 +43,17 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let pa = translated_va_to_pa(current_user_token(),_ts as usize);
+    let ts = pa.0 as *mut TimeVal;
+    let us = get_time_us();
+    unsafe {
+        *ts = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
+    }
+    0
+    // -1
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -51,6 +61,23 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+
+    // debug!("kernel TaskInfo {:?}", _ti);
+    // let curr_ms = get_time_ms();
+    // let task = current_task();
+    // let ti = unsafe { _ti.as_mut().unwrap() };
+    // ti.time = curr_ms - task.running_at_ms;
+    // ti.status = TaskStatus::Running;
+
+    // unsafe {
+    //     core::ptr::copy_nonoverlapping(
+    //         task.syscall_times.as_ptr(),
+    //         ti.syscall_times.as_mut_ptr(),
+    //         task.syscall_times.len(),
+    //     )
+    // };
+    // 0
+
     -1
 }
 

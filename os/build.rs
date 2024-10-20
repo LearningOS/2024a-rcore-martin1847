@@ -22,8 +22,6 @@ fn insert_app_data() -> Result<()> {
         .collect();
     apps.sort();
 
-    // .align 3 来确保它们对齐到 8 字节，这是由于如果不这样做， xmas-elf crate 可能会在解析 ELF 的时候进行不对齐的内存读写
-    // 例如使用 ld 指令从内存的一个没有对齐到 8 字节的地址加载一个 64 位的值到一个通用寄存器。
     writeln!(f, r#"
     .align 3
     .section .data
