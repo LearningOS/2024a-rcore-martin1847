@@ -78,7 +78,8 @@ impl TaskManager {
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
-        next_task.task_status = TaskStatus::Running;
+        // next_task.task_status = TaskStatus::Running;
+        next_task.mark_running();
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -139,7 +140,8 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
-            inner.tasks[next].task_status = TaskStatus::Running;
+            // inner.tasks[next].task_status = TaskStatus::Running;
+            inner.tasks[next].mark_running();
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -201,4 +203,21 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// get the current 'Running' task
+pub fn current_task() -> &'static TaskControlBlock {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    // let task = inner.tasks[current];
+    let task = &inner.tasks[current];
+    // 由于 task 的生命周期与 inner 相同，我们需要确保返回的引用是 'static
+    unsafe { &*(task as *const TaskControlBlock) }
+}
+
+/// inc sys_call for current task , return the times .include this time.
+pub fn inc_task_sys_call(syscall_id: usize) -> u32{
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].inc_sys_call(syscall_id)
 }

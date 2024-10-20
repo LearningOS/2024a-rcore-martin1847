@@ -63,22 +63,23 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
 
     // debug!("kernel TaskInfo {:?}", _ti);
-    // let curr_ms = get_time_ms();
-    // let task = current_task();
-    // let ti = unsafe { _ti.as_mut().unwrap() };
-    // ti.time = curr_ms - task.running_at_ms;
-    // ti.status = TaskStatus::Running;
+    let curr_ms = get_time_ms();
+    let task = crate::task::current_task();
+    let pa = translated_va_to_pa(current_user_token(),_ti as usize).0 as *mut TaskInfo;
+    let ti = unsafe { pa.as_mut().unwrap() };
+    ti.time = curr_ms - task.running_at_ms;
+    ti.status = TaskStatus::Running;
 
-    // unsafe {
-    //     core::ptr::copy_nonoverlapping(
-    //         task.syscall_times.as_ptr(),
-    //         ti.syscall_times.as_mut_ptr(),
-    //         task.syscall_times.len(),
-    //     )
-    // };
-    // 0
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            task.syscall_times.as_ptr(),
+            ti.syscall_times.as_mut_ptr(),
+            task.syscall_times.len(),
+        )
+    };
+    0
 
-    -1
+    // -1
 }
 
 // YOUR JOB: Implement mmap.

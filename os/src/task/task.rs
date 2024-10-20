@@ -1,6 +1,6 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{
     kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
@@ -28,6 +28,11 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The first time running at , in milliseconds
+    pub running_at_ms : usize,
+    /// The numbers of syscall called by task
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
 }
 
 impl TaskControlBlock {
@@ -63,6 +68,8 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            running_at_ms : 0,
+            syscall_times: [0; MAX_SYSCALL_NUM]
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -96,6 +103,21 @@ impl TaskControlBlock {
             None
         }
     }
+
+    /// Mark the task ro Running Status 
+    pub fn mark_running(&mut self){
+        self.task_status =  TaskStatus::Running;
+        if self.running_at_ms == 0 {
+            self.running_at_ms = crate::timer::get_time_ms();
+        }
+    }
+
+    /// inc once sys call by call id
+    pub fn inc_sys_call(&mut self,syscall_id: usize)->u32{
+        self.syscall_times[syscall_id] += 1;
+        self.syscall_times[syscall_id]
+    }
+    
 }
 
 #[derive(Copy, Clone, PartialEq)]
