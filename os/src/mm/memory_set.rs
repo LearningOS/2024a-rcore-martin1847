@@ -71,6 +71,8 @@ impl MemorySet {
         self.areas.push(map_area);
     }
     /// Mention that trampoline is not collected by areas.
+    /// 用户态、内核态都会用到，也都放在同样的虚拟地址 FFFFF000，最顶端(这里实现空了一个页，不知为啥？)
+    /// 这部分虚拟地址一样，对应的物理地址也一样。用户态没有加U，虽看得见，但不让摸。
     fn map_trampoline(&mut self) {
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
@@ -131,7 +133,7 @@ impl MemorySet {
             ),
             None,
         );
-        info!("mapping physical memory");
+        info!("mapping physical memory others , total MEMORY_END - QEMU , here < 8MB");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -150,6 +152,7 @@ impl MemorySet {
         // map trampoline
         memory_set.map_trampoline();
         // map program headers of elf, with U flag
+        // 使用外部 crate xmas_elf 来解析传入的应用 ELF 数据并可以轻松取出各个部分
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
@@ -336,6 +339,8 @@ impl MapArea {
     }
     /// data: start-aligned but maybe with shorter length
     /// assume that all frames were cleared before
+    /// 将切片 data 中的数据拷贝到当前逻辑段实际被内核放置在的各物理页帧上，从而在地址空间中通过该逻辑段就能访问这些数据。
+    /// 调用它的时候需要满足：切片 data 中的数据大小不超过当前逻辑段的总大小，且切片中的数据会被对齐到逻辑段的开头，然后逐页拷贝到实际的物理页帧。
     pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;
@@ -353,6 +358,8 @@ impl MapArea {
             if start >= len {
                 break;
             }
+            // 该方法来自于 os/src/mm/address.rs 中为 VirtPageNum 实现的 StepOne Trait
+            // 前进一步，指针+1
             current_vpn.step();
         }
     }

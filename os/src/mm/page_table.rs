@@ -34,8 +34,9 @@ impl PageTableEntry {
             bits: ppn.0 << 10 | flags.bits as usize,
         }
     }
-    /// Create an empty page table entry
+    /// Create an empty page table entry ， NOT Valid !!!
     pub fn empty() -> Self {
+        // 生成一个全零的页表项，注意这隐含着该页表项的 V 标志位为 0 ，因此它是不合法的。
         PageTableEntry { bits: 0 }
     }
     /// Get the physical page number from the page table entry
@@ -66,6 +67,9 @@ impl PageTableEntry {
 
 /// page table structure
 pub struct PageTable {
+    // 关于保存页表的物理页，由于数量很少（只有保存数据的1/512）
+    // 目前没有设计支持分配之后运行时动态回收的功能，而是进程退出时一起回收的
+    // 要支持这个机制的话，得维护页表树结构的引用计数才行，还要考虑如何高效利用内存
     root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
 }

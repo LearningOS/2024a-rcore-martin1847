@@ -4,7 +4,10 @@ use buddy_system_allocator::LockedHeap;
 
 #[global_allocator]
 /// heap allocator instance
-static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
+/// The max order of the buddy system is `ORDER - 1`.
+/// For example, to create a heap with a maximum block size of 2^32 bytes,
+/// you should define the heap with `ORDER = 33`.
+static HEAP_ALLOCATOR: LockedHeap<33> = LockedHeap::<33>::empty();
 
 #[alloc_error_handler]
 /// panic when heap allocation error occurs
@@ -23,6 +26,7 @@ pub fn init_heap() {
 }
 
 #[allow(unused)]
+/// test for heap alloc.
 pub fn heap_test() {
     use alloc::boxed::Box;
     use alloc::vec::Vec;
@@ -42,6 +46,8 @@ pub fn heap_test() {
     for (i, val) in v.iter().take(500).enumerate() {
         assert_eq!(*val, i);
     }
+    // 通过 as_ref 和 as_ptr 方法可以分别看到它们指向的数据的位置
+    // 能够确认它们的确在位于 .bss 段的堆上。
     assert!(bss_range.contains(&(v.as_ptr() as usize)));
     drop(v);
     println!("heap_test passed!");

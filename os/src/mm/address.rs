@@ -50,6 +50,7 @@ impl Debug for PhysPageNum {
 
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
+        //只取后56位有效数字即可
         Self(v & ((1 << PA_WIDTH_SV39) - 1))
     }
 }
@@ -177,6 +178,8 @@ impl PhysAddr {
 }
 impl PhysPageNum {
     /// Get the reference of page table(array of ptes)
+    // 在分页机制开启前，这样做自然成立；而开启之后，虽然裸指针被视为一个虚拟地址，
+    // 但是上面已经提到，基于恒等映射，虚拟地址会映射到一个相同的物理地址，因此在也是成立的。
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
