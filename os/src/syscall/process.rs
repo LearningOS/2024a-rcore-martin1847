@@ -1,8 +1,8 @@
 //! Process management syscalls
 
 use crate::{
-    config::MAX_SYSCALL_NUM, mm::translated_va_to_pa, task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE}, mm::{current_user_table, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum}, task::{
+        change_program_brk, current_task, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
     }, timer::{get_time_ms, get_time_us}
 };
 
@@ -83,17 +83,83 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if len == 0 {
+        trace!("kernel: len 不可为0 !");
+        return -1;
+    }
+    if port & !0x7 != 0 {
+        trace!("kernel: port 其余位必须为0 : {}!",port);
+        return -1;
+    }
+    if port & 0x7 == 0 {
+        trace!("kernel: port 这样的内存无意义,不可读 : {}!",port);
+        return -1;
+    }
+    if start & (PAGE_SIZE - 1) != 0 {
+        trace!("kernel: start 没有按页大小对齐 : {}!",start);
+        return -1;
+    }
+
+    // -1
+    let pages = (len - 1 + PAGE_SIZE)/PAGE_SIZE;
+    let table = current_user_table();
+    let vpn_start = start/PAGE_SIZE;
+    for i in 0..pages {
+        let vpn = VirtPageNum(vpn_start + i);
+        if table.find_pte(vpn).is_some() {
+            trace!("kernel: [start, start + len) 中存在已经被映射的页: {}!",vpn_start + i);
+            return -1;
+        }
+    }
+
+    let permission = MapPermission::from_bits_truncate((port<<1) as u8) | MapPermission::U;
+
+    println!("MMAP permission: {:?}, port {} , pages {} , len {} ",permission,port,pages,len);
+    // let pcn =  current_task();
+    let mset = &current_task().memory_set as *const MemorySet as *mut MemorySet;
+    
+    unsafe {
+        // (*mset).activate();
+        (*mset).insert_framed_area(crate::mm::VirtAddr::from(start), crate::mm::VirtAddr::from(start+len), permission);
+    }
+    // mset
+    0
 }
 
 // YOUR JOB: Implement munmap.
 // 一定要注意 mmap 是的页表项，注意 riscv 页表项的格式与 port 的区别。
 // 你增加 PTE_U 了吗？
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    if start & (PAGE_SIZE - 1) != 0 {
+        trace!("kernel: start 没有按页大小对齐 : {}!",start);
+        return -1;
+    }
+
+    // -1
+    let pages = (len - 1 + PAGE_SIZE)/PAGE_SIZE;
+    let table = current_user_table();
+    let vpn_start = start/PAGE_SIZE;
+    for i in 0..pages {
+        let vpn = VirtPageNum(vpn_start + i);
+        if table.find_pte(vpn).is_none() {
+            trace!("kernel: [start, start + len) 中存在未被映射的虚存: {}!",vpn_start + i);
+            return -1;
+        }
+        println!("==== sys_munmap check VPN {} has pte ",vpn_start + i);
+    }
+
+    println!("==== sys_munmap start {} , pages {} , len {} ",start,pages,len);
+    
+    let mset = &current_task().memory_set as *const MemorySet as *mut MemorySet;
+    unsafe {
+        (*mset).shrink_to(crate::mm::VirtAddr::from(start), crate::mm::VirtAddr::from(start));
+    }
+    // mset
+    0
+    // -1
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

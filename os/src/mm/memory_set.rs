@@ -325,10 +325,19 @@ impl MapArea {
     }
     #[allow(unused)]
     pub fn shrink_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+
+        println!("====== before shrink_to start {} , end {} , newEnd {} ",self.vpn_range.get_start().0,self.vpn_range.get_end().0,new_end.0);
+    
         for vpn in VPNRange::new(new_end, self.vpn_range.get_end()) {
             self.unmap_one(page_table, vpn)
         }
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
+
+       
+        // for vpn in VPNRange::new(self.vpn_range.get_start(), new_end) {
+        //     self.unmap_one(page_table, vpn)
+        // }
+        // self.vpn_range = VPNRange::new(new_end, self.vpn_range.get_end());
     }
     #[allow(unused)]
     pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
