@@ -89,6 +89,8 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 }
 
 // YOUR JOB: Implement munmap.
+// 一定要注意 mmap 是的页表项，注意 riscv 页表项的格式与 port 的区别。
+// 你增加 PTE_U 了吗？
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     -1
