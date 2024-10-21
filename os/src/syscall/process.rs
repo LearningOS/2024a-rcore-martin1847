@@ -3,13 +3,15 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    loader::get_app_data_by_name,
+    mm::{current_user_table, translated_refmut, translated_str, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -120,40 +122,158 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_get_time");
+    let pa_sec = translated_va_to_pa(current_user_token(), _ts as usize).0 as *mut usize;
+    let pa_usec = translated_va_to_pa(current_user_token(), (_ts as usize)+8usize).0 as *mut usize;
+    // let ts = pa.0 as *mut TimeVal;
+    let us = get_time_us();
+    unsafe {
+        *pa_sec = us / 1_000_000;
+        *pa_usec = us % 1_000_000;
+        // *ts = TimeVal {
+        //     sec: us / 1_000_000,
+        //     usec: us % 1_000_000,
+        // };
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+
+    // debug!("kernel TaskInfo {:?}", _ti);
+    let curr_ms = get_time_ms();
+    let task = crate::task::current_task().unwrap();
+    let task_inner = &task.inner_exclusive_access();
+    let pa = translated_va_to_pa(current_user_token(), _ti as usize).0 as *mut TaskInfo;
+    let ti = unsafe { pa.as_mut().unwrap() };
+    ti.time = curr_ms - task_inner.running_at_ms;
+    ti.status = TaskStatus::Running;
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            task_inner.syscall_times.as_ptr(),
+            ti.syscall_times.as_mut_ptr(),
+            task_inner.syscall_times.len(),
+        )
+    };
+    0
+
+    // -1
 }
 
-/// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
+// YOUR JOB: Implement mmap.
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
+    // trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    if len == 0 {
+        warn!("kernel: len  == 0 !");
+        return -1;
+    }
+    if port & !0x7 != 0 {
+        warn!("kernel: port mask must be 0 {}!", port);
+        return -1;
+    }
+    if port & 0x7 == 0 {
+        warn!("kernel: port not vaild , R = 0 : {}!", port);
+        return -1;
+    }
+    if start & (PAGE_SIZE - 1) != 0 {
+        warn!("kernel: start not aligend!  {}!", start);
+        return -1;
+    }
+
+
+    // -1
+    let pages = (len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    let table = current_user_table();
+    let vpn_start = start / PAGE_SIZE;
+    for i in 0..pages {
+        let vpn = VirtPageNum(vpn_start + i);
+        // vpn.0
+        debug!("sys_mmap: try to mapping vpn: {:?} / pages {}!", vpn, pages);
+        if table.translate(vpn).is_some_and(|p|p.is_valid()) {
+            warn!(
+                "sys_mmap: [start, start + len) already existed mapping !: {:?} !",
+                vpn
+            );
+            return -1;
+        }
+    }
+
+    let permission = MapPermission::from_bits_truncate((port << 1) as u8) | MapPermission::U;
+
+    debug!(
+        "sys_mmap: permission111 {:?}, start {:#x} , pages {} vpn {:?} , len {} ",
+        permission,
+        start,
+        pages,
+        crate::mm::VirtAddr::from(start),
+        len
     );
-    -1
+    // let pcn =  current_task();
+    let task = crate::task::current_task().unwrap();
+    // let mut mset = &task.inner_exclusive_access().memory_set;
+    let mset = &task.inner_exclusive_access().memory_set as *const MemorySet as *mut MemorySet;
+
+    unsafe {
+        // (*mset).activate();
+        (*mset).insert_framed_area(
+            crate::mm::VirtAddr::from(start),
+            crate::mm::VirtAddr::from(start + pages * PAGE_SIZE),
+            permission,
+        );
+    }
+    0
 }
 
-/// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
+// YOUR JOB: Implement munmap.
+// 一定要注意 mmap 是的页表项，注意 riscv 页表项的格式与 port 的区别。
+// 你增加 PTE_U 了吗？
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    // trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    if start & (PAGE_SIZE - 1) != 0 {
+        warn!("kernel: start ptr NOT aligend : {}!", start);
+        return -1;
+    }
+
+    // -1
+    let pages = (len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    let table = current_user_table();
+    let vpn_start = start / PAGE_SIZE;
+    for i in 0..pages {
+        let vpn = VirtPageNum(vpn_start + i);
+        if table.translate(vpn).is_some_and(|p|!p.is_valid()) {
+            warn!(
+                "kernel: [start, start + len) has unmapped : {}!",
+                vpn_start + i
+            );
+            return -1;
+        }
+        // debug!("==== sys_munmap check VPN {} has pte ", vpn_start + i);
+    }
+
+    debug!(
+        "==== UN sys_munmap start {:#x} ,vpn {:?}, pages {}/ len {} ",
+        start,
+        crate::mm::VirtAddr::from(start),
+        pages,
+        len
     );
-    -1
+
+    let task = crate::task::current_task().unwrap();
+    // let mut mset = &task.inner_exclusive_access().memory_set;
+    let mset = &task.inner_exclusive_access().memory_set as *const MemorySet as *mut MemorySet;
+    unsafe {
+        (*mset).shrink_to(
+            crate::mm::VirtAddr::from(start),
+            crate::mm::VirtAddr::from(start + (pages - 1) * PAGE_SIZE),
+        );
+    }
+    // mset
+    0
 }
 
 /// change data segment size
