@@ -8,6 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -63,6 +64,9 @@ pub fn run_tasks() {
             // next_task_cx_ptr 作为 __switch 的第二个参数，然后修改任务的状态为 Running 。
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            if task_inner.running_at_ms == 0 {
+                task_inner.running_at_ms = get_time_ms();
+            }
             // release coming task_inner manually
             // 手动回收对即将执行任务的任务控制块的借用标记，使得后续我们仍可以访问该任务控制块。
             // 这里我们不能依赖编译器在 if let 块结尾时的自动回收，因为中间我们会在自动回收之前调用 __switch
@@ -114,5 +118,14 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     drop(processor);
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
+    }
+}
+
+/// inc sys_call for current task , return the times .include this time.
+pub fn inc_task_sys_call(syscall_id: usize) {
+    if let Some(task) = current_task() {
+        // access coming task TCB exclusively
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.syscall_times[syscall_id] += 1;
     }
 }

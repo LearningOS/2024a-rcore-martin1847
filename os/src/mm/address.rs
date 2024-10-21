@@ -16,13 +16,11 @@ pub struct PhysAddr(pub usize);
 /// Virtual Address
 #[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-///virtual address
 pub struct VirtAddr(pub usize);
 
 /// Physical Page Number PPN
 #[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-///phiscal page number
 pub struct PhysPageNum(pub usize);
 
 /// Virtual Page Number VPN
