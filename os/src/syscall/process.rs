@@ -1,9 +1,13 @@
 //! Process management syscalls
 
 use crate::{
-    config::{MAX_SYSCALL_NUM, PAGE_SIZE}, mm::{current_user_table, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum}, task::{
-        change_program_brk, current_task, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
-    }, timer::{get_time_ms, get_time_us}
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
+    mm::{current_user_table, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum},
+    task::{
+        change_program_brk, current_task, current_user_token, exit_current_and_run_next,
+        suspend_current_and_run_next, TaskStatus,
+    },
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -43,7 +47,7 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    let pa = translated_va_to_pa(current_user_token(),_ts as usize);
+    let pa = translated_va_to_pa(current_user_token(), _ts as usize);
     let ts = pa.0 as *mut TimeVal;
     let us = get_time_us();
     unsafe {
@@ -65,7 +69,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     // debug!("kernel TaskInfo {:?}", _ti);
     let curr_ms = get_time_ms();
     let task = crate::task::current_task();
-    let pa = translated_va_to_pa(current_user_token(),_ti as usize).0 as *mut TaskInfo;
+    let pa = translated_va_to_pa(current_user_token(), _ti as usize).0 as *mut TaskInfo;
     let ti = unsafe { pa.as_mut().unwrap() };
     ti.time = curr_ms - task.running_at_ms;
     ti.status = TaskStatus::Running;
@@ -84,45 +88,62 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    // trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
     if len == 0 {
-        trace!("kernel: len 不可为0 !");
+        warn!("kernel: len  == 0 !");
         return -1;
     }
     if port & !0x7 != 0 {
-        trace!("kernel: port 其余位必须为0 : {}!",port);
+        warn!("kernel: port mask must be 0 {}!", port);
         return -1;
     }
     if port & 0x7 == 0 {
-        trace!("kernel: port 这样的内存无意义,不可读 : {}!",port);
+        warn!("kernel: port not vaild , R = 0 : {}!", port);
         return -1;
     }
     if start & (PAGE_SIZE - 1) != 0 {
-        trace!("kernel: start 没有按页大小对齐 : {}!",start);
+        warn!("kernel: start not aligend!  {}!", start);
         return -1;
     }
 
+
     // -1
-    let pages = (len - 1 + PAGE_SIZE)/PAGE_SIZE;
+    let pages = (len - 1 + PAGE_SIZE) / PAGE_SIZE;
     let table = current_user_table();
-    let vpn_start = start/PAGE_SIZE;
+    let vpn_start = start / PAGE_SIZE;
     for i in 0..pages {
         let vpn = VirtPageNum(vpn_start + i);
-        if table.find_pte(vpn).is_some() {
-            trace!("kernel: [start, start + len) 中存在已经被映射的页: {}!",vpn_start + i);
+        // vpn.0
+        debug!("sys_mmap: try to mapping vpn: {:?} / pages {}!", vpn, pages);
+        if table.translate(vpn).is_some_and(|p|p.is_valid()) {
+            warn!(
+                "sys_mmap: [start, start + len) already existed mapping !: {:?} !",
+                vpn
+            );
             return -1;
         }
     }
 
-    let permission = MapPermission::from_bits_truncate((port<<1) as u8) | MapPermission::U;
+    let permission = MapPermission::from_bits_truncate((port << 1) as u8) | MapPermission::U;
 
-    println!("MMAP permission: {:?}, port {} , pages {} , len {} ",permission,port,pages,len);
+    debug!(
+        "sys_mmap: permission111 {:?}, start {:#x} , pages {} vpn {:?} , len {} ",
+        permission,
+        start,
+        pages,
+        crate::mm::VirtAddr::from(start),
+        len
+    );
     // let pcn =  current_task();
     let mset = &current_task().memory_set as *const MemorySet as *mut MemorySet;
-    
+
     unsafe {
         // (*mset).activate();
-        (*mset).insert_framed_area(crate::mm::VirtAddr::from(start), crate::mm::VirtAddr::from(start+len), permission);
+        (*mset).insert_framed_area(
+            crate::mm::VirtAddr::from(start),
+            crate::mm::VirtAddr::from(start + pages * PAGE_SIZE),
+            permission,
+        );
     }
     // mset
     0
@@ -132,30 +153,42 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 // 一定要注意 mmap 是的页表项，注意 riscv 页表项的格式与 port 的区别。
 // 你增加 PTE_U 了吗？
 pub fn sys_munmap(start: usize, len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    // trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     if start & (PAGE_SIZE - 1) != 0 {
-        trace!("kernel: start 没有按页大小对齐 : {}!",start);
+        warn!("kernel: start ptr NOT aligend : {}!", start);
         return -1;
     }
 
     // -1
-    let pages = (len - 1 + PAGE_SIZE)/PAGE_SIZE;
+    let pages = (len - 1 + PAGE_SIZE) / PAGE_SIZE;
     let table = current_user_table();
-    let vpn_start = start/PAGE_SIZE;
+    let vpn_start = start / PAGE_SIZE;
     for i in 0..pages {
         let vpn = VirtPageNum(vpn_start + i);
-        if table.find_pte(vpn).is_none() {
-            trace!("kernel: [start, start + len) 中存在未被映射的虚存: {}!",vpn_start + i);
+        if table.translate(vpn).is_some_and(|p|!p.is_valid()) {
+            warn!(
+                "kernel: [start, start + len) has unmapped : {}!",
+                vpn_start + i
+            );
             return -1;
         }
-        println!("==== sys_munmap check VPN {} has pte ",vpn_start + i);
+        // debug!("==== sys_munmap check VPN {} has pte ", vpn_start + i);
     }
 
-    println!("==== sys_munmap start {} , pages {} , len {} ",start,pages,len);
-    
+    debug!(
+        "==== UN sys_munmap start {:#x} ,vpn {:?}, pages {}/ len {} ",
+        start,
+        crate::mm::VirtAddr::from(start),
+        pages,
+        len
+    );
+
     let mset = &current_task().memory_set as *const MemorySet as *mut MemorySet;
     unsafe {
-        (*mset).shrink_to(crate::mm::VirtAddr::from(start), crate::mm::VirtAddr::from(start));
+        (*mset).shrink_to(
+            crate::mm::VirtAddr::from(start),
+            crate::mm::VirtAddr::from(start + (pages - 1) * PAGE_SIZE),
+        );
     }
     // mset
     0
