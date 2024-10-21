@@ -56,14 +56,21 @@ pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
         if let Some(task) = fetch_task() {
+            // __switch 的第一个参数，也就是当前 idle 控制流的 task_cx_ptr
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
+            // next_task_cx_ptr 作为 __switch 的第二个参数，然后修改任务的状态为 Running 。
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             // release coming task_inner manually
+            // 手动回收对即将执行任务的任务控制块的借用标记，使得后续我们仍可以访问该任务控制块。
+            // 这里我们不能依赖编译器在 if let 块结尾时的自动回收，因为中间我们会在自动回收之前调用 __switch
+            // 已经结束访问却没有进行回收的情况下切换到下一个任务，最终可能违反 UPSafeCell 的借用约定而使得内核报错退出。
             drop(task_inner);
             // release coming task TCB manually
+            // 在稳定的情况下，每个尚未结束的进程的任务控制块都只能被引用一次，
+            // 要么在任务管理器中，要么则是在代表 CPU 处理器的 Processor 中。
             processor.current = Some(task);
             // release processor manually
             drop(processor);

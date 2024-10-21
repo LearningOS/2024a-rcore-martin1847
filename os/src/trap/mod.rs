@@ -64,11 +64,17 @@ pub fn trap_handler() -> ! {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
+            // fork子进程地址空间 Trap 上下文的 sepc 也是移动之后的值，我们无需再进行修改。
             cx.sepc += 4;
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
-            // cx is changed during sys_exec, so we have to call it again
+            // cx is changed during `sys_exec`, so we have to call it again
+            // 对于系统调用 sys_exec 来说，一旦调用它之后，我们会发现 trap_handler 原来上下文中的 cx 失效了—
+            // 因为它是用来访问之前地址空间中 Trap 上下文被保存在的那个物理页帧的，而现在它已经被回收掉了。
+            // 因此，为了能够处理类似的这种情况，我们在 syscall 分发函数返回之后需要重新获取 cx 
             cx = current_trap_cx();
+            // 父进程系统调用的返回值会在 trap_handler 
+            // syscall 返回之后再设置为 sys_fork 的返回值，这里我们返回子进程的 PID 。
             cx.x[10] = result as usize;
         }
         Trap::Exception(Exception::StoreFault)

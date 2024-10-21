@@ -167,6 +167,7 @@ impl TaskControlBlock {
         // ---- access parent PCB exclusively
         let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
+        // 跟exec区别，一个来自ELF，一个直接复制地址空间
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
@@ -181,11 +182,15 @@ impl TaskControlBlock {
             kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
+                    // 子进程的 Trap 上下文也是完全从父进程复制过来的，
+                    // 这可以保证子进程进入用户态和其父进程回到用户态的那一瞬间 CPU 的状态是完全相同的
                     trap_cx_ppn,
+                    // 让子进程和父进程的 base_size ，也即应用数据的大小保持一致；
                     base_size: parent_inner.base_size,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
+                    // 将父进程的弱引用计数放到子进程的进程控制块中
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,
@@ -195,6 +200,7 @@ impl TaskControlBlock {
             },
         });
         // add child
+        // 将子进程插入到父进程的孩子向量 children 中。
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
