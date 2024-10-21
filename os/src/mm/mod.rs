@@ -23,6 +23,8 @@ use page_table::{PTEFlags, PageTable};
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
+    // 有vec，依赖heap分配
     frame_allocator::init_frame_allocator();
+    // 启动sv39页模式，对于内核，恒等映射，地址/上下文不变
     KERNEL_SPACE.exclusive_access().activate();
 }

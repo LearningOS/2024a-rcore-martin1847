@@ -210,14 +210,14 @@ pub fn current_task() -> &'static TaskControlBlock {
     let inner = TASK_MANAGER.inner.exclusive_access();
     let current = inner.current_task;
     // let task = inner.tasks[current];
-    let task = &inner.tasks[current];
+    let task = &inner.tasks[current]  as *const TaskControlBlock;
         // 使用 ManuallyDrop 来避免 drop 掉原来的 task
     // let task = core::mem::ManuallyDrop::new(Box::new(task.clone()));
 
     // 使用 Box::leak 将 Box<TaskControlBlock> 转换为 &'static mut TaskControlBlock
     // Box::leak(task)
     // 由于 task 的生命周期与 inner 相同，我们需要确保返回的引用是 'static
-    unsafe { &*(task as *const TaskControlBlock) }
+    unsafe { &*task }
     
 }
 

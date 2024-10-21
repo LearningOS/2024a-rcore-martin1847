@@ -54,7 +54,8 @@ impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
-        // trace!("last {} Physical Frames.", self.end - self.current);
+        //  23922 Physical Frames. 533134 - 557056
+        debug!("init StackFrameAllocator {} Physical Frames. {} - {}", self.end - self.current, self.current , self.end);
     }
 }
 impl FrameAllocator for StackFrameAllocator {

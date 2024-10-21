@@ -283,6 +283,7 @@ impl MapArea {
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
+        trace!("MapArea New VPN {:?} -> {:?}",start_vpn,end_vpn);
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
             data_frames: BTreeMap::new(),
@@ -299,9 +300,11 @@ impl MapArea {
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
                 ppn = frame.ppn;
+                // debug!("MapArea map_one va {:?} ->  Phys {:?}",vpn,ppn);
                 self.data_frames.insert(vpn, frame);
             }
         }
+        // debug!("MapArea Add PTE va {:?} ->  Phys {:?}",vpn,ppn);
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         page_table.map(vpn, ppn, pte_flags);
     }
