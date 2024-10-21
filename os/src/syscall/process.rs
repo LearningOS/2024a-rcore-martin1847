@@ -122,17 +122,24 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    let pa_sec = translated_va_to_pa(current_user_token(), _ts as usize).0 as *mut usize;
-    let pa_usec = translated_va_to_pa(current_user_token(), (_ts as usize)+8usize).0 as *mut usize;
-    // let ts = pa.0 as *mut TimeVal;
+    let ts_va = _ts as usize;
+    let ts_page_start = ts_va & !(PAGE_SIZE - 1);
+    let ts_page_end = ts_page_start + PAGE_SIZE;
+    // let ts_end = ts_va + core::mem::size_of::<TimeVal>();
+
+    if ts_va + core::mem::size_of::<TimeVal>() > ts_page_end {
+        // TimeVal 结构体跨越了页边界，返回错误
+        return -1;
+    }
+
+    let pa = translated_va_to_pa(current_user_token(), ts_va);
+    let ts = pa.0 as *mut TimeVal;
     let us = get_time_us();
     unsafe {
-        *pa_sec = us / 1_000_000;
-        *pa_usec = us % 1_000_000;
-        // *ts = TimeVal {
-        //     sec: us / 1_000_000,
-        //     usec: us % 1_000_000,
-        // };
+        *ts = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
     }
     0
 }
