@@ -213,3 +213,17 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
+
+/// translated VirtAddr to PhysAddr
+// seems va_ptr as VirtAddr , has a bug ? drop ?
+pub fn translated_va_to_pa(token: usize, va_ptr: usize) -> PhysAddr {
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(va_ptr);
+    let ppn = page_table.translate(va.floor()).unwrap().ppn().0;
+    PhysAddr((ppn << crate::config::PAGE_SIZE_BITS) + va.page_offset())
+}
+
+/// get current user page table
+pub fn current_user_table() -> PageTable {
+    PageTable::from_token(crate::task::current_user_token())
+}
