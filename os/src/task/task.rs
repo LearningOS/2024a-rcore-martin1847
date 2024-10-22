@@ -186,7 +186,7 @@ impl TaskControlBlock {
     }
 
 
-    /// parent process fork the child process
+    /// parent process fork the child process,with trap_cx_ppn and init MemorySet
     pub fn fork_with(self: &Arc<Self>,trap_cx_ppn:PhysPageNum,memory_set:MemorySet) -> Arc<Self> {
         // ---- access parent PCB exclusively
         // let mut parent_inner = self.inner_exclusive_access();
@@ -218,7 +218,7 @@ impl TaskControlBlock {
 
         // let parent_tcb_inner = self.inner;
 
-        debug!(" [ fork_with ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",kernel_stack_top);
+        // debug!(" [ fork_with ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",kernel_stack_top);
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -263,17 +263,17 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
-        let task_control_block = self.fork_with(trap_cx_ppn, memory_set);
+        let child_tcb = self.fork_with(trap_cx_ppn, memory_set);
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let tcb_ptr = task_control_block.clone();
+        let tcb_ptr = child_tcb.clone();
         let tcb = tcb_ptr.inner_exclusive_access();
         let trap_cx = tcb.get_trap_cx();
         // trap_cx.kernel_sp = kernel_stack_top;
-        debug!(" [ fork ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",tcb.task_cx.sp);
+        // debug!(" [ fork ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",tcb.task_cx.sp);
         trap_cx.kernel_sp = tcb.task_cx.sp;
         // return
-        task_control_block
+        child_tcb
         // **** release child PCB
         // ---- release parent PCB
     }
