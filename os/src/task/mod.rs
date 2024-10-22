@@ -96,8 +96,9 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
     inner.children.clear();
     // deallocate user space
-    // 将地址空间中的逻辑段列表 areas 清空
+    // 将地址空间中的逻辑段列表 areas 清空, 即进程的数据和代码对应的物理页帧都被回收
     // 存放PageTable页表的那些物理页帧此时还不会被回收（会由父进程最后回收子进程剩余的占用资源）
+    // areas.clear();
     inner.memory_set.recycle_data_pages();
     drop(inner);
     // **** release current PCB
