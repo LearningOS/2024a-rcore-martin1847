@@ -1,11 +1,11 @@
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str},
+    mm::{translated_ref, translated_refmut, translated_str, translated_va_to_pa},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
-    },
+    }, timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -163,11 +163,26 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
-    );
-    -1
+    let ts_va = _ts as usize;
+    let ts_page_start = ts_va & !(PAGE_SIZE - 1);
+    let ts_page_end = ts_page_start + PAGE_SIZE;
+    // let ts_end = ts_va + core::mem::size_of::<TimeVal>();
+
+    if ts_va + core::mem::size_of::<TimeVal>() > ts_page_end {
+        // TimeVal 结构体跨越了页边界，返回错误
+        return -1;
+    }
+
+    let pa = translated_va_to_pa(current_user_token(), ts_va);
+    let ts = pa.0 as *mut TimeVal;
+    let us = get_time_us();
+    unsafe {
+        *ts = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
+    }
+    0
 }
 
 /// task_info syscall
