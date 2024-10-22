@@ -23,6 +23,7 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
+        //  TODO 换成stride模式
         self.ready_queue.pop_front()
     }
 }

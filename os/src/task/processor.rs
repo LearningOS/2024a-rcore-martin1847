@@ -10,6 +10,7 @@ use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
+// use alloc::boxed::Box;
 use alloc::sync::Arc;
 use lazy_static::*;
 
@@ -51,6 +52,15 @@ lazy_static! {
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 
+
+// struct MyDropTest(Box<usize>);
+
+// impl  Drop for  MyDropTest {
+//     fn drop(&mut self) {
+//         warn!("drop test after swtich :: {}",self.0)
+//     }
+// }
+
 ///The main part of process execution and scheduling
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
@@ -71,13 +81,19 @@ pub fn run_tasks() {
             // 手动回收对即将执行任务的任务控制块的借用标记，使得后续我们仍可以访问该任务控制块。
             // 这里我们不能依赖编译器在 if let 块结尾时的自动回收，因为中间我们会在自动回收之前调用 __switch
             // 已经结束访问却没有进行回收的情况下切换到下一个任务，最终可能违反 UPSafeCell 的借用约定而使得内核报错退出。
+            // 后面线程马上要使用TCB
+            
             drop(task_inner);
             // release coming task TCB manually
             // 在稳定的情况下，每个尚未结束的进程的任务控制块都只能被引用一次，
             // 要么在任务管理器中，要么则是在代表 CPU 处理器的 Processor 中。
             processor.current = Some(task);
             // release processor manually
+            // warn!("run_tasks we donot drop processor.... here !!");
             drop(processor);
+            // PROCESSOR.exclusive_release();
+            // let my_drop_test = MyDropTest(Box::new(5));
+            // warn!("test new my_drop_test {}",my_drop_test.0);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }

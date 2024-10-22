@@ -298,22 +298,30 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 // const EMPTY_MSET:MemorySet = ;
 
+// lazy_static::lazy_static! {
+//     static ref EMPTY_MSET_MANUALLY_DROP: core::mem::ManuallyDrop<MemorySet> = 
+//     core::mem::ManuallyDrop::new(MemorySet::new_bare());
+// }
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
+/// syscall ID: 400
+// 功能：新建子进程，使其执行目标程序。
+// 说明：成功返回子进程id，否则返回 -1。
 pub fn sys_spawn(path: *const u8) -> isize {
 
-    let token = current_user_token();
-    let path = translated_str(token, path);
+    // let token = ;
+    let path = translated_str(current_user_token(), path);
     let elf_data =  get_app_data_by_name(path.as_str());
     if elf_data.is_none() {
         debug!("[ spawn ] app {} not found!",path);
         return -1;
     }
+
     let elf_data = elf_data.unwrap();
 
-
     let current_task = current_task().unwrap();
-    //被替换为ELF，留个站位符即可
+    // spawn 不必 像 fork 一样复制父进程的地址空间。
+    // 被替换为ELF，留个站位符即可 
     debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
     let new_task = current_task.fork_with(0.into(),MemorySet::new_bare());
 
@@ -351,10 +359,19 @@ pub fn sys_spawn(path: *const u8) -> isize {
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+// syscall ID：140
+// 设置当前进程优先级为 prio
+// 参数：prio 进程优先级，要求 prio >= 2
+// 返回值：如果输入合法则返回 prio，否则返回 -1
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+
+    if prio < 2 {
+        return -1;
+    }
+
     -1
 }
