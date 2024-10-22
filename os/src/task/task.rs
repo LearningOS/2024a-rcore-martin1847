@@ -1,8 +1,9 @@
 //! Types related to task management & Functions for completely changing TCB
+use super::stride::Stride;
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PhysPageNum, StepByOne, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -20,6 +21,9 @@ pub struct TaskControlBlock {
     /// Kernel stack corresponding to PID
     pub kernel_stack: KernelStack,
 
+    // /// schedule priority, min = 2, small has more opportunity
+    // pub priority: usize,
+
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
@@ -33,6 +37,11 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+
+    /// Get the const reference of the inner TCB
+    pub fn inner_readonly_access(&self) -> core::cell::Ref<'_, TaskControlBlockInner>{
+        self.inner.readonly_access()
     }
 }
 
@@ -74,6 +83,9 @@ pub struct TaskControlBlockInner {
     
     /// The numbers of syscall called by task
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// stride ,schedule times * pass for Stride
+    pub stride: Stride
 }
 
 impl TaskControlBlockInner {
@@ -90,6 +102,16 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+
+    /// mark current task as running, and inc the schedule_time
+    pub fn mark_running(&mut self)  {
+        self.task_status = TaskStatus::Running;
+        if self.running_at_ms == 0 {
+            self.running_at_ms = crate::timer::get_time_ms();
+        }
+        self.stride.step();
+        // self.stride
     }
 }
 
@@ -112,6 +134,7 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
+            // priority: super::stride::TOP_PRIORITY,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -125,6 +148,7 @@ impl TaskControlBlock {
                     heap_bottom: user_sp,
                     program_brk: user_sp,
                     running_at_ms : 0,
+                    stride:Stride::default(),
                     syscall_times: [0; MAX_SYSCALL_NUM]
                 })
             },
@@ -195,6 +219,7 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
+            // priority:self.priority,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     // 子进程的 Trap 上下文也是完全从父进程复制过来的，
@@ -212,6 +237,7 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     running_at_ms : 0,
+                    stride : Stride::copy_priority(&parent_inner.stride),
                     syscall_times: [0; MAX_SYSCALL_NUM]
                 })
             },
@@ -229,6 +255,7 @@ impl TaskControlBlock {
         // let parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
         // 跟exec区别，一个来自ELF，一个直接复制地址空间
+        // 及时释放exclusive_access
         let memory_set = MemorySet::from_existed_user(&self.inner_exclusive_access().memory_set);
         // warn!(" [fork !!] not OK!! use parent_inner to find trap_cx_ppn!!!");
         let trap_cx_ppn = memory_set

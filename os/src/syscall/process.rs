@@ -6,8 +6,7 @@ use crate::{
     loader::get_app_data_by_name,
     mm::{current_user_table, translated_refmut, translated_str, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        add_task, current_task, current_user_token, exit_current_and_run_next, stride::{Stride, MIN_PRIORITY}, suspend_current_and_run_next, TaskStatus
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -366,9 +365,15 @@ pub fn sys_set_priority(prio: isize) -> isize {
         current_task().unwrap().pid.0
     );
 
-    if prio < 2 {
-        return -1;
+    if prio < MIN_PRIORITY {
+        return  -1;
     }
 
-    -1
+    // if prio <=0 || !Stride::is_valid(prio as usize) {
+    //     return -1;
+    // }
+    let current_task = current_task().unwrap();
+    let mut task_inner = current_task.inner_exclusive_access();
+    task_inner.stride = Stride::new(prio);
+    prio
 }

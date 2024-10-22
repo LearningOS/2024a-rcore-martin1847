@@ -28,6 +28,12 @@ impl<T> UPSafeCell<T> {
         self.inner.borrow_mut()
     }
 
+    /// Panic if the data has been borrowed.
+    pub fn readonly_access(&self) -> core::cell::Ref<'_, T> {
+        self.inner.borrow()
+    }
+
+        
     /// manual release refer，then can borrow_mut again.
     pub fn exclusive_release(&self)  {
         // self.inner.()
