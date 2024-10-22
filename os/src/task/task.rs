@@ -185,21 +185,27 @@ impl TaskControlBlock {
         // **** release current PCB
     }
 
+
     /// parent process fork the child process
-    pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
-        // ---- hold parent PCB lock
-        let mut parent_inner = self.inner_exclusive_access();
+    pub fn fork_with(self: &Arc<Self>,trap_cx_ppn:PhysPageNum,memory_set:MemorySet) -> Arc<Self> {
+        // ---- access parent PCB exclusively
+        // let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
         // 跟exec区别，一个来自ELF，一个直接复制地址空间
-        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
-            .unwrap()
-            .ppn();
+        // let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        // // warn!(" [fork !!] not OK!! use parent_inner to find trap_cx_ppn!!!");
+        // let trap_cx_ppn = memory_set
+        //     .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+        //     .unwrap()
+        //     .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+        
+
+        let mut parent_inner = self.inner_exclusive_access();
+        
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
         for fd in parent_inner.fd_table.iter() {
@@ -209,6 +215,10 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+
+        // let parent_tcb_inner = self.inner;
+
+        debug!(" [ fork_with ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",kernel_stack_top);
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -237,10 +247,31 @@ impl TaskControlBlock {
         // add child
         // 将子进程插入到父进程的孩子向量 children 中。
         parent_inner.children.push(task_control_block.clone());
+        task_control_block
+    }
+
+
+    /// parent process fork the child process
+    pub fn fork(self: &Arc<Self>) -> Arc<Self> {
+        // ---- access parent PCB exclusively
+        // let parent_inner = self.inner_exclusive_access();
+        // copy user space(include trap context)
+        // 跟exec区别，一个来自ELF，一个直接复制地址空间
+        let memory_set = MemorySet::from_existed_user(&self.inner_exclusive_access().memory_set);
+        // warn!(" [fork !!] not OK!! use parent_inner to find trap_cx_ppn!!!");
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+            .unwrap()
+            .ppn();
+        let task_control_block = self.fork_with(trap_cx_ppn, memory_set);
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
+        let tcb_ptr = task_control_block.clone();
+        let tcb = tcb_ptr.inner_exclusive_access();
+        let trap_cx = tcb.get_trap_cx();
+        // trap_cx.kernel_sp = kernel_stack_top;
+        debug!(" [ fork ] set trap_cx.kernel_sp to tcb.task_cx.sp : {}!",tcb.task_cx.sp);
+        trap_cx.kernel_sp = tcb.task_cx.sp;
         // return
         task_control_block
         // **** release child PCB
