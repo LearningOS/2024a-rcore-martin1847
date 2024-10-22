@@ -293,6 +293,8 @@ pub fn sys_sbrk(size: i32) -> isize {
     }
 }
 
+// const EMPTY_MSET:MemorySet = ;
+
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(path: *const u8) -> isize {
@@ -308,7 +310,9 @@ pub fn sys_spawn(path: *const u8) -> isize {
 
 
     let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
+    //被替换为ELF，留个站位符即可
+    debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
+    let new_task = current_task.fork_with(0.into(),MemorySet::new_bare());
 
     // let n_pid = &new_task.pid;
 
