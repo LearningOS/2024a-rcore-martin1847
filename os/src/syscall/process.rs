@@ -38,6 +38,9 @@ pub fn sys_exit(exit_code: i32) -> ! {
     panic!("Unreachable in sys_exit!");
 }
 
+
+/// 用户态程序主动释放CPU/退出进程使用
+/// current task gives up resources for other tasks
 pub fn sys_yield() -> isize {
     //trace!("kernel: sys_yield");
     suspend_current_and_run_next();
@@ -295,12 +298,52 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_spawn(path: *const u8) -> isize {
+
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    let elf_data =  get_app_data_by_name(path.as_str());
+    if elf_data.is_none() {
+        debug!("[ spawn ] app {} not found!",path);
+        return -1;
+    }
+    let elf_data = elf_data.unwrap();
+
+
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+
+    // let n_pid = &new_task.pid;
+
+    // let new_pid = new_task.pid.0;
+    new_task.exec(elf_data);
+    // modify trap context of new_task, because it returns immediately after switching
+    // let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    // // we do not have to move to next instruction since we have done it before
+    // // for child process, fork returns 0
+    // trap_cx.x[10] = 0;  //x[10] is a0 reg
+    // add new task to scheduler
+
+    let n_pid = new_task.pid.0;
+    add_task(new_task);
+    n_pid as isize
+
+    // let pid = sys_fork();
+
+    // 用户态写法
+    // if pid == 0 {
+    //     // child process
+    // }
+
+    // let task = current_task().unwrap();
+    // task.exec(app_elf);
+    // 0
+
+    // trace!(
+    //     "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
+    //     current_task().unwrap().pid.0
+    // );
+    // -1
 }
 
 // YOUR JOB: Set task priority.
