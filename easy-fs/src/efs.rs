@@ -1,3 +1,4 @@
+
 use super::{
     block_cache_sync_all, get_block_cache, Bitmap, BlockDevice, DiskInode, DiskInodeType, Inode,
     SuperBlock,
@@ -5,7 +6,10 @@ use super::{
 use crate::BLOCK_SZ;
 use alloc::sync::Arc;
 use spin::Mutex;
-///An easy file system on block
+/// 有了块缓存，我们就可以在内存中方便地处理easyfs文件系统在磁盘上的各种数据了，这就是第三层文件系统的磁盘数据结构。
+/// 数据都会放到磁盘上，这包括了管理这个文件系统的 超级块 (Super Block)，管理空闲磁盘块的 索引节点位图区 和 数据块位图区 
+/// 以及管理文件的 索引节点区 和 放置文件数据的 数据块区 组成。
+/// An easy file system on block
 pub struct EasyFileSystem {
     ///Real device
     pub block_device: Arc<dyn BlockDevice>,
@@ -14,11 +18,18 @@ pub struct EasyFileSystem {
     ///Data bitmap
     pub data_bitmap: Bitmap,
     inode_area_start_block: u32,
-    data_area_start_block: u32,
+    data_area_start_block: u32
 }
 
 type DataBlock = [u8; BLOCK_SZ];
 /// An easy fs over a block device
+/// EasyFileSystem.create：创建文件系统
+/// EasyFileSystem.open：打开文件系统
+/// EasyFileSystem.alloc_inode：分配inode （dealloc_inode未实现，所以还不能删除文件）
+/// EasyFileSystem.alloc_data：分配数据块
+/// EasyFileSystem.dealloc_data：回收数据块
+/// 对于单个文件的管理和读写的控制逻辑主要是 索引节点（文件控制块） 来完成，
+/// 这是文件系统的第五层，最顶层，其核心是 Inode 数据结构及其关键成员函数：
 impl EasyFileSystem {
     /// A data block of block size
     pub fn create(
@@ -109,7 +120,7 @@ impl EasyFileSystem {
         // acquire efs lock temporarily
         let (block_id, block_offset) = efs.lock().get_disk_inode_pos(0);
         // release efs lock
-        Inode::new(block_id, block_offset, Arc::clone(efs), block_device)
+        Inode::new(block_id, block_offset, Arc::clone(efs), block_device,0)
     }
     /// Get inode by id
     pub fn get_disk_inode_pos(&self, inode_id: u32) -> (u32, usize) {

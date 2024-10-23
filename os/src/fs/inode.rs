@@ -52,6 +52,12 @@ impl OSInode {
         }
         v
     }
+
+    /// get the inner inode
+    pub fn inner_inode(&self) -> Arc<Inode> {
+        self.inner.readonly_access().inode.clone()
+    }
+
 }
 
 lazy_static! {
@@ -99,6 +105,23 @@ impl OpenFlags {
         }
     }
 }
+
+
+/// unlink a file
+pub fn linkat(name: &str,inode_id: u32) -> Option<u32> {
+    ROOT_INODE.linkat(&name,inode_id)
+}
+
+/// unlink a file
+pub fn unlink(name: &str) -> isize {
+    ROOT_INODE.unlink(&name)
+}
+
+/// unlink a file
+pub fn link_times(inode_id: u32) -> u32 {
+    ROOT_INODE.link_times(inode_id)
+}
+
 
 /// Open a file
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {

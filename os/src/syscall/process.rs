@@ -329,7 +329,7 @@ pub fn sys_spawn(path: *const u8) -> isize {
     // spawn 不必 像 fork 一样复制父进程的地址空间。
     // 被替换为ELF，留个站位符即可 
     // TODO 文件表也可以替换，留空
-    debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
+    // debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
     let new_task = current_task.fork_with(0.into(),MemorySet::new_bare());
 
     // let n_pid = &new_task.pid;

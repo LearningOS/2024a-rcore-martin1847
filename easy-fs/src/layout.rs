@@ -8,7 +8,7 @@ const EFS_MAGIC: u32 = 0x3b800001;
 /// The max number of direct inodes
 const INODE_DIRECT_COUNT: usize = 28;
 /// The max length of inode name
-const NAME_LENGTH_LIMIT: usize = 27;
+pub const NAME_LENGTH_LIMIT: usize = 27;
 /// The max number of indirect1 inodes
 const INODE_INDIRECT1_COUNT: usize = BLOCK_SZ / 4;
 /// The max number of indirect2 inodes
@@ -72,6 +72,7 @@ impl SuperBlock {
 pub enum DiskInodeType {
     File,
     Directory,
+    SymbolicLink
 }
 
 /// A indirect block
@@ -106,6 +107,10 @@ impl DiskInode {
     #[allow(unused)]
     pub fn is_file(&self) -> bool {
         self.type_ == DiskInodeType::File
+    }
+    /// Whether this inode is a link
+    pub fn is_link(&self) -> bool {
+        self.type_ == DiskInodeType::SymbolicLink
     }
     /// Return block number correspond to size.
     pub fn data_blocks(&self) -> u32 {
@@ -393,9 +398,11 @@ impl DiskInode {
 pub struct DirEntry {
     name: [u8; NAME_LENGTH_LIMIT + 1],
     inode_id: u32,
+    //TODO 这里没有用到暂时
+    link_times:u32
 }
-/// Size of a directory entry
-pub const DIRENT_SZ: usize = 32;
+/// Size of a directory entry 28 + 4
+pub const DIRENT_SZ: usize = 32 + 32;
 
 impl DirEntry {
     /// Create an empty directory entry
@@ -403,15 +410,18 @@ impl DirEntry {
         Self {
             name: [0u8; NAME_LENGTH_LIMIT + 1],
             inode_id: 0,
+            link_times:0
         }
     }
     /// Crate a directory entry from name and inode number
     pub fn new(name: &str, inode_id: u32) -> Self {
         let mut bytes = [0u8; NAME_LENGTH_LIMIT + 1];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
+        
         Self {
             name: bytes,
             inode_id,
+            link_times:0
         }
     }
     /// Serialize into bytes
