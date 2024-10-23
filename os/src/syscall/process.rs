@@ -5,7 +5,7 @@ use alloc::sync::Arc;
 use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
-    loader::get_app_data_by_name,
+    // loader::get_app_data_by_name, 移除：应用加载器 loader 子模块，本章开始从文件系统中加载应用
     mm::{current_user_table, translated_refmut, translated_str, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next, stride::{Stride, MIN_PRIORITY}, suspend_current_and_run_next, TaskStatus
@@ -310,13 +310,20 @@ pub fn sys_spawn(path: *const u8) -> isize {
 
     // let token = ;
     let path = translated_str(current_user_token(), path);
-    let elf_data =  get_app_data_by_name(path.as_str());
-    if elf_data.is_none() {
-        debug!("[ spawn ] app {} not found!",path);
-        return -1;
+    let app_inode = open_file(path.as_str(), OpenFlags::RDONLY);
+    if app_inode.is_none() {
+        debug!("sys_spawn file not found {}",path);
+        return  -1;
     }
 
-    let elf_data = elf_data.unwrap();
+    // let elf_data =  get_app_data_by_name(path.as_str());
+    // if elf_data.is_none() {
+    //     debug!("[ spawn ] app {} not found!",path);
+    //     return -1;
+    // }
+
+    let elf_file =  app_inode.unwrap().read_all();
+    let elf_data = elf_file.as_slice();
 
     let current_task = current_task().unwrap();
     // spawn 不必 像 fork 一样复制父进程的地址空间。
