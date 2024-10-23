@@ -85,6 +85,17 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
 }
 
 /// YOUR JOB: Implement linkat.
+/// 参数：
+// olddirfd，newdirfd: 仅为了兼容性考虑，本次实验中始终为 AT_FDCWD (-100)，可以忽略。
+// flags: 仅为了兼容性考虑，本次实验中始终为 0，可以忽略。
+// oldpath：原有文件路径
+// newpath: 新的链接文件路径。
+// 说明：
+// 为了方便，不考虑新文件路径已经存在的情况（属于未定义行为），除非链接同名文件。
+// 返回值：如果出现了错误则返回 -1，否则返回 0。
+// 可能的错误
+// 链接同名文件。
+
 pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
     trace!(
         "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",

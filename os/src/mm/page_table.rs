@@ -219,6 +219,8 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .get_mut()
 }
 
+/// 将 translated_byte_buffer 得到的 Vec<&'static mut [u8]> 进一步包装，
+/// 不仅保留了原有的分段读写能力，还可以将其转化为一个迭代器逐字节进行读写
 /// An abstraction over a buffer passed from user space to kernel space
 pub struct UserBuffer {
     /// A list of buffers

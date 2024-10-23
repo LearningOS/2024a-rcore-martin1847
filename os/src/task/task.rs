@@ -73,6 +73,8 @@ pub struct TaskControlBlockInner {
 
     /// It is set when active exit or execution error occurs
     pub exit_code: i32,
+
+    /// Trait Object 动态分发，文件的类型可能各不相同
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
 
     /// Heap bottom
@@ -113,7 +115,7 @@ impl TaskControlBlockInner {
             self.fd_table.len() - 1
         }
     }
-    
+
     /// mark current task as running, and inc the schedule_time
     pub fn mark_running(&mut self)  {
         self.task_status = TaskStatus::Running;
@@ -231,6 +233,7 @@ impl TaskControlBlock {
 
         let mut parent_inner = self.inner_exclusive_access();
         
+        // TaskControlBlock::fork 中则需要将父进程的 fd_table 复制一份给子进程。
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
         for fd in parent_inner.fd_table.iter() {

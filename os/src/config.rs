@@ -24,4 +24,8 @@ pub const CLOCK_FREQ: usize = 12500000;
 /// the physical memory end
 pub const MEMORY_END: usize = 0x88000000;
 /// The base address of control registers in Virtio_Block device
+/// 内存映射 I/O (MMIO, Memory-Mapped I/O) 指的是外设的设备寄存器可以通过特定的物理内存地址来访问，
+/// 每个外设的设备寄存器都分布在没有交集的一个或数个物理地址区间中，不同外设的设备寄存器所占的物理地址空间也不会产生交集
+/// 从Qemu for RISC-V 64 平台的 源码 中可以找到 VirtIO 外设总线的 MMIO 物理地址区间为从 0x10001000 开头的 4KiB
+/// 后续new_kernel中使用透明的恒等映射，从而让内核可以兼容于直接访问物理地址的设备驱动库。 
 pub const MMIO: &[(usize, usize)] = &[(0x10001000, 0x1000)];
