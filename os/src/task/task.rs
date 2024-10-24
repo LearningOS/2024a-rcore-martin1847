@@ -7,11 +7,12 @@ use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
 use core::cell::RefMut;
 
-/// Task control block structure
+/// Task control block structure , here is Thread 
 pub struct TaskControlBlock {
     /// immutable
     pub process: Weak<ProcessControlBlock>,
     /// Kernel stack corresponding to PID
+    /// 每个线程有自己的线程栈 （用户态、内核态）TRAMPOLINE 下面一个内存地址
     pub kstack: KernelStack,
     /// mutable
     inner: UPSafeCell<TaskControlBlockInner>,
@@ -31,6 +32,7 @@ impl TaskControlBlock {
 }
 
 pub struct TaskControlBlockInner {
+    /// 任务（线程）用户态资源
     pub res: Option<TaskUserRes>,
     /// The physical page number of the frame where the trap context is placed
     pub trap_cx_ppn: PhysPageNum,

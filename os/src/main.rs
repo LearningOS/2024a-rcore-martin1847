@@ -74,8 +74,20 @@ pub fn rust_main() -> ! {
     logging::init();
     mm::init();
     mm::remap_test();
+    // 先注册时钟中断处理。。各种信号，中断数组表。
+    // Trap::Interrupt(Interrupt::SupervisorTimer) => {
+    // riscv 不支持直接设置时钟中断的间隔，只能在每次触发时钟中断的时候，设置下一次时钟中断的时间。
+    //     set_next_trigger();
+    //     check_timer();
+    //     suspend_current_and_run_next();
+    // }
+    // TrapMode::Direct, 都到base，程序里处理
     trap::init();
+    //  通过将 mie 寄存器的 STIE 位（第 5 位）设为 1 开启了内核态的时钟中断。
+    // core::arch::asm!("csrrs x0, {1}, {0}",in(reg)bits,const 0x104), 
+    //  _set((1<<5));CSR 寄存器 0x104： RISC-V 架构中的 stimecmp 寄存器。这个寄存器用于设置下一个定时器中断的时间点。当系统时钟达到或超过 stimecmp 寄存器中的值时，会触发一个定时器中断。
     trap::enable_timer_interrupt();
+    // 定时器在操作系统中非常重要，用于实现时间片轮转调度、定时任务、超时处理等功能。
     timer::set_next_trigger();
     fs::list_apps();
     task::add_initproc();

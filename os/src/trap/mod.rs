@@ -39,6 +39,10 @@ fn set_kernel_trap_entry() {
     extern "C" {
         fn __trap_from_kernel();
     }
+// RISCV 中有两种中断入口模式：
+// 直接模式（Driect） MODE = 0 ，触发任何 中断异常 时都把 PC 设置为 BASE
+// 向量模式（Vectored） MODE = 1 ，对第 i 种 中断 ，跳转到 BASE + i * 4；对所有 异常 ，仍跳转到 BASE
+// 为了实现简单，我们采用第一种模式，先进入统一的处理函数，之后再根据中断/异常种类进行不同处理。
     unsafe {
         stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
     }

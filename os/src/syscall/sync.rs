@@ -45,12 +45,14 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .mutex_list
         .iter()
         .enumerate()
+        // 循环利用，废弃的mutex估计take出去了，留下了空洞index，继续使用。
         .find(|(_, item)| item.is_none())
         .map(|(id, _)| id)
     {
         process_inner.mutex_list[id] = mutex;
         id as isize
     } else {
+        // 没有空洞，插入，位置索引号
         process_inner.mutex_list.push(mutex);
         process_inner.mutex_list.len() as isize - 1
     }

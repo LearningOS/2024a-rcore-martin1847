@@ -5,6 +5,7 @@ use crate::{
 };
 use alloc::sync::Arc;
 /// thread create syscall
+/// 一个进程执行中发出系统调用后，操作系统就需要在当前进程控制块中创建一个线程控制块
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     trace!(
         "kernel:pid[{}] tid[{}] sys_thread_create",

@@ -49,6 +49,7 @@ impl Semaphore {
         if inner.count < 0 {
             inner.wait_queue.push_back(current_task().unwrap());
             drop(inner);
+            // 标记为 Blocked
             block_current_and_run_next();
         }
     }
