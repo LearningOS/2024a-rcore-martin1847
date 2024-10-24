@@ -5,6 +5,7 @@ use crate::{
 };
 use alloc::sync::Arc;
 /// thread create syscall
+/// OS调度的最小单位不变，还是task，不过这次被抽象成了线程
 /// 一个进程执行中发出系统调用后，操作系统就需要在当前进程控制块中创建一个线程控制块
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     trace!(
@@ -19,6 +20,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
             .tid
     );
     let task = current_task().unwrap();
+    // 升级为强引用
     let process = task.process.upgrade().unwrap();
     // create a new thread
     let new_task = Arc::new(TaskControlBlock::new(
@@ -27,22 +29,28 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
             .res
             .as_ref()
             .unwrap()
+            // the bottom addr (low addr) of the user stack for a task
             .ustack_base,
+            // 线程的用户态栈/trap上下文 确保在用户态的线程能正常执行函数调用
         true,
     ));
     // add new task to scheduler
     add_task(Arc::clone(&new_task));
     let new_task_inner = new_task.inner_exclusive_access();
     let new_task_res = new_task_inner.res.as_ref().unwrap();
+    //  process.inner_exclusive_access().alloc_tid();
+    // 优先使用recycled的，不然从0开始增长计数
     let new_task_tid = new_task_res.tid;
     let mut process_inner = process.inner_exclusive_access();
     // add new thread to current process
     let tasks = &mut process_inner.tasks;
+    // 对于销毁的线程，空洞，继续复用。实现一个id做映射的效果，简易版map，recycled的
     while tasks.len() < new_task_tid + 1 {
         tasks.push(None);
     }
     tasks[new_task_tid] = Some(Arc::clone(&new_task));
     let new_task_trap_cx = new_task_inner.get_trap_cx();
+    //  建立trap/task上下文
     *new_task_trap_cx = TrapContext::app_init_context(
         entry,
         new_task_res.ustack_top(),

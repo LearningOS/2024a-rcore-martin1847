@@ -69,6 +69,8 @@ pub fn add_task(task: Arc<TaskControlBlock>) {
 }
 
 /// Wake up a task
+///  Hensen 语义则认为应该优先继续执行当前线程。
+/// 跟Hoare二者的相同之处在于它们都将锁直接转交给唤醒的线程，被唤醒之后其等待的条件一定是成立的
 pub fn wakeup_task(task: Arc<TaskControlBlock>) {
     trace!("kernel: TaskManager::wakeup_task");
     let mut task_inner = task.inner_exclusive_access();

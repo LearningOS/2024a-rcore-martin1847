@@ -13,11 +13,16 @@ use core::cell::{RefCell, RefMut};
 ///
 /// In order to get mutable reference of inner data, call
 /// `exclusive_access`.
+/// 允许在单核上安全使用可变全局变量 
+/// only use it in uniprocessor.
+/// only use it in uniprocessor.
+/// only use it in uniprocessor.
 pub struct UPSafeCell<T> {
     /// inner data
     inner: RefCell<T>,
 }
-
+// 支持在单核处理器上安全地在线程间共享可变全局变量。
+// 因为是单核，所以欺骗/告诉编译器，声明支持全局变量安全地在线程间共享
 unsafe impl<T> Sync for UPSafeCell<T> {}
 
 impl<T> UPSafeCell<T> {

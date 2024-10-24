@@ -113,6 +113,8 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     if !inner
         .children
         .iter()
+        // 另一个线程调用 waittid 系统调用才能收集该线程的退出码并彻底回收该线程的资源：
+        // 不能自己释放自己
         .any(|p| pid == -1 || pid as usize == p.getpid())
     {
         return -1;

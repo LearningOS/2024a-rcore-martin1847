@@ -24,6 +24,11 @@ pub struct ProcessControlBlock {
 }
 
 /// Inner of Process Control Block
+/// 在没有线程之前，一个进程在一个时刻只有一个执行点（即程序计数器 PC 寄存器保存的要执行指令的指针以及栈的位置）
+/// 扩展为多个执行点，即在进程中存在多个线程，每个线程都有一个执行点
+/// 线程共享进程的地址空间，所以可以不必采用相对比较复杂的进程间通信机制（一般需要内核的介入）
+/// 带来一个新问题，并发访问、线程安全问题。
+/// 一个进程中的多线程可以独立运行，取代了进程，成为操作系统调度的基本单位。
 pub struct ProcessControlBlockInner {
     /// is zombie?
     pub is_zombie: bool,
@@ -123,6 +128,9 @@ impl ProcessControlBlock {
             },
         });
         // create a main thread, we should allocate ustack and trap_cx here
+        // 直接当前栈下放到Thread中去处理，创建第一个主线程，所谓主线程。
+        // 主线程由于最先被创建，它的 TID 固定为 0 。
+        // 线程没有父子关系，大家都是兄弟，但还是有个老大
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&process),
             ustack_base,
@@ -211,6 +219,7 @@ impl ProcessControlBlock {
     }
 
     /// Only support processes with a single thread.
+    /// 暂时不支持多线程的进程进行fork，优先使用 sys_thread_create
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         trace!("kernel: fork");
         let mut parent = self.inner_exclusive_access();
@@ -260,6 +269,8 @@ impl ProcessControlBlock {
                 .as_ref()
                 .unwrap()
                 .ustack_base(),
+            // 对于主线程，tid=0.对应的trap_cs ustack虚拟地址都是一样的，直接复用即可
+            // 但是需要创建新的内核栈
             // here we do not allocate trap_cx or ustack again
             // but mention that we allocate a new kstack here
             false,

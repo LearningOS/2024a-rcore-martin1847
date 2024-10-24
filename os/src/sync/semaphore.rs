@@ -5,6 +5,7 @@ use crate::task::{block_current_and_run_next, current_task, wakeup_task, TaskCon
 use alloc::{collections::VecDeque, sync::Arc};
 
 /// semaphore structure
+/// 跟java的pack & unpack很像。不过unpack多次，也只有一个许可。
 pub struct Semaphore {
     /// semaphore inner
     pub inner: UPSafeCell<SemaphoreInner>,

@@ -90,6 +90,8 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
     // Move the task to stop-wait status, to avoid kernel stack from being freed
     if tid == 0 {
+        // 主线程直接退出进程。。。
+        // 进程退出码即为其主线程退出码 
         add_stopping_task(task);
     } else {
         drop(task);
@@ -140,8 +142,12 @@ pub fn exit_current_and_run_next(exit_code: i32) {
             // are limited in a single process. Therefore, the blocked tasks are
             // removed when the PCB is deallocated.
             trace!("kernel: exit_current_and_run_next .. remove_inactive_task");
+            // 主线程退出的时候可能有一些线程处于就绪状态等在任务管理器 TASK_MANAGER 的队列中，
+            // 我们需要及时调用 remove_inactive_task 函数将它们从队列中移除，不然将导致它们的引用计数不能成功归零并回收资源，最终导致内存溢出。
             remove_inactive_task(Arc::clone(&task));
             let mut task_inner = task.inner_exclusive_access();
+            // 先拿出来，准备后面删
+            // 为了保证进程控制块的独占访问，我们需要先将所有的线程的 TaskUserRes 收集到向量 recycle_res 中
             if let Some(res) = task_inner.res.take() {
                 recycle_res.push(res);
             }
@@ -149,12 +155,15 @@ pub fn exit_current_and_run_next(exit_code: i32) {
         // dealloc_tid and dealloc_user_res require access to PCB inner, so we
         // need to collect those user res first, then release process_inner
         // for now to avoid deadlock/double borrow problem.
+        // rust的限制，先把里面的拿出来，再释放
         drop(process_inner);
         recycle_res.clear();
 
         let mut process_inner = process.inner_exclusive_access();
         process_inner.children.clear();
         // deallocate other data in user space i.e. program code/data section
+        // 注意我们在回收物理页帧之前必须将 TaskUserRes 清空，
+        // 不然相关物理页帧会被回收两次。目前这种回收顺序并不是最好的实现，同学可以想想看有没有更合适的实现。
         process_inner.memory_set.recycle_data_pages();
         // drop file descriptors
         process_inner.fd_table.clear();
@@ -199,6 +208,7 @@ pub fn current_add_signal(signal: SignalFlags) {
 }
 
 /// the inactive(blocked) tasks are removed when the PCB is deallocated.(called by exit_current_and_run_next)
+/// 从TM中解绑，释放内存；释放注册的定时器/目前看到sleep会用到
 pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
     remove_task(Arc::clone(&task));
     trace!("kernel: remove_inactive_task .. remove_timer");

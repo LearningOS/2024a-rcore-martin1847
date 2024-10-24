@@ -67,6 +67,9 @@ impl PartialEq for TimerCondVar {
 }
 impl Eq for TimerCondVar {}
 impl PartialOrd for TimerCondVar {
+    // 标准库提供的二叉堆 BinaryHeap 是一个大根堆，
+    // 因此在实现 PartialOrd Trait 的时候我们需要将超时时间取反。
+    // TODO 换成 other.cmp(self)
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let a = -(self.expire_ms as isize);
         let b = -(other.expire_ms as isize);

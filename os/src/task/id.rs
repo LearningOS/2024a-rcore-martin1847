@@ -127,6 +127,10 @@ impl KernelStack {
 }
 
 /// User Resource for a task
+/// RAII风格
+/// 除了线程id，还有ustack内存映射和trapContext映射
+/// 按照固定位置、固定大小、格式放置，id又是自增
+/// 只要知道线程的 TID ，我们就可以计算出线程在所属进程地址空间内的用户栈和 Trap 上下文的位置
 pub struct TaskUserRes {
     /// task id
     pub tid: usize,
@@ -136,10 +140,12 @@ pub struct TaskUserRes {
     pub process: Weak<ProcessControlBlock>,
 }
 /// Return the bottom addr (low addr) of the trap context for a task
+/// id成反比，越大地址越低
 fn trap_cx_bottom_from_tid(tid: usize) -> usize {
     TRAP_CONTEXT_BASE - tid * PAGE_SIZE
 }
 /// Return the bottom addr (high addr) of the user stack for a task
+/// id成正比，越大地址越大
 fn ustack_bottom_from_tid(ustack_base: usize, tid: usize) -> usize {
     ustack_base + tid * (PAGE_SIZE + USER_STACK_SIZE)
 }
@@ -163,6 +169,11 @@ impl TaskUserRes {
         task_user_res
     }
     /// Allocate user resource for a task
+    /// 1. alloc ustack manually  Low/ half Space 从堆区向上放，留4KiB做保护页
+    /// 防止stack over flow 直接破坏数据。理论上超过USER_STACK_SIZE + 4KB= 12KB，也挂。
+    /// 主线程的栈地址更小
+    /// 2. alloc trap_cx High/Half Space ， 从高区向下增长。 主线程在最顶端（不算trampoline/可以只读共享），
+    /// https://rcore-os.cn/rCore-Tutorial-Book-v3/_images/app-as-full-with-threads.png
     pub fn alloc_user_res(&self) {
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.inner_exclusive_access();
