@@ -2,9 +2,11 @@
 
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use crate::sync::ThreadId;
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use core::cell::RefMut;
 
 /// Task control block structure , here is Thread 
@@ -66,6 +68,7 @@ use core::cell::RefMut;
 
 // }
 pub struct TaskControlBlock {
+    // pub tid : ThreadId,
     /// immutable
     pub process: Weak<ProcessControlBlock>,
     /// Kernel stack corresponding to PID
@@ -87,6 +90,12 @@ impl TaskControlBlock {
         let inner = process.inner_exclusive_access();
         inner.memory_set.token()
     }
+
+    /// get the thread id
+    pub fn tid(&self) -> Option<ThreadId> {
+        let inner =  self.inner.exclusive_access();
+        inner.res.as_ref().map(|u|u.tid)
+    }
 }
 
 pub struct TaskControlBlockInner {
@@ -106,6 +115,9 @@ pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
     /// It is set when active exit or execution error occurs
     pub exit_code: Option<i32>,
+
+    /// 分配矩阵 semp -> cnt
+    pub allocation_semaps: Vec<isize>,
 }
 
 impl TaskControlBlockInner {
@@ -140,6 +152,7 @@ impl TaskControlBlock {
                     task_cx: TaskContext::goto_trap_return(kstack_top),
                     task_status: TaskStatus::Ready,
                     exit_code: None,
+                    allocation_semaps:Vec::new()
                 })
             },
         }

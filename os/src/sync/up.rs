@@ -37,4 +37,9 @@ impl<T> UPSafeCell<T> {
     pub fn exclusive_access(&self) -> RefMut<'_, T> {
         self.inner.borrow_mut()
     }
+
+    /// Panic if the data has been borrowed.
+    pub fn readonly_access(&self) -> core::cell::Ref<'_, T> {
+        self.inner.borrow()
+    }
 }

@@ -54,6 +54,8 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// if enable_deadlock
+    pub enable_deadlock : bool
 }
 
 impl ProcessControlBlockInner {
@@ -124,6 +126,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    enable_deadlock:false
                 })
             },
         });
@@ -254,6 +257,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    enable_deadlock:parent.enable_deadlock
                 })
             },
         });
