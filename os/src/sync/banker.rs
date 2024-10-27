@@ -12,16 +12,11 @@ pub enum DeadlockKind {
 
 #[allow(dead_code)]
 pub struct BankerAlgorithm {
-    // // ResourceId instance to process allocation relationship
-    // resource_to_process: BTreeMap<ResourceId, ThreadId>,
-    // // ThreadId to resource instance request relationship
-    // process_to_resource: BTreeMap<ThreadId, BTreeSet<ResourceId>>,
-    // kind : DeadlockKind,
     // 1 . Available resources
     available_res: BTreeMap<ResourceId, isize>,
     // 2. Allocated resources to each process
     allocation_t2r: BTreeMap<ThreadId, BTreeMap<ResourceId, usize>>,
-    // // 3. Maximum resource needs of each process
+    // 3. Maximum resource needs of each process
     // 我们这里每次只能申请一个资源，没有就会block，isize都是1了其实，可以退化成BTreeSet
     max_needs_t2r: BTreeMap<ThreadId, BTreeMap<ResourceId, isize>>,
 }
@@ -85,12 +80,12 @@ impl BankerAlgorithm {
                     }
 
                 }
-                Self {
-                    available_res,
-                    // max_needs_t2r: BTreeMap::new(),
-                    allocation_t2r,
-                    max_needs_t2r,
-                }
+                // Self {
+                //     available_res,
+                //     // max_needs_t2r: BTreeMap::new(),
+                //     allocation_t2r,
+                //     max_needs_t2r,
+                // }
             }
             DeadlockKind::BySemaphore => {
 
@@ -123,47 +118,23 @@ impl BankerAlgorithm {
                         }
                     }
                 }
-                Self {
-                    available_res,
-                    // max_needs_t2r: BTreeMap::new(),
-                    allocation_t2r,
-                    max_needs_t2r,
-                }
+             
             }
-        }
+        };
 
-        
-        // BankerAlgorithm {
-        //     // resource_to_process: BTreeMap::new(),
-        //     // process_to_resource: BTreeMap::new(),
-        //     available_res: BTreeMap::new(),
-        //     // max_needs_t2r: BTreeMap::new(),
-        //     allocation_t2r: BTreeMap::new(),
-        // }
+        Self {
+            available_res,
+            // max_needs_t2r: BTreeMap::new(),
+            allocation_t2r,
+            max_needs_t2r,
+        }
     }
 
-    // fn request_resource(&mut self, process: ThreadId, resource: ResourceId) {
-    //     // self.process_to_resource
-    //     //     .entry(process.clone())
-    //     //     .or_insert_with(BTreeSet::new)
-    //     //     .insert(resource.clone());
-
-    //     // self.resource_to_process.insert(resource.clone(), process.clone());
-
-    //     self.max_needs_t2r
-    //         .entry(process.clone())
-    //         .or_insert_with(BTreeMap::new)
-    //         .insert(resource, 1);
-
-    //     self.allocation_t2r
-    //         .entry(process)
-    //         .or_insert_with(BTreeMap::new)
-    //         .insert(resource, 0);
-
-    //     *self.available_res.entry(resource).or_insert(0) += 1;
-    // }
 
     pub fn is_safe(&self) -> bool {
+
+        // return  true;
+
         let mut work = self.available_res.clone();
         let mut finish = BTreeMap::new();
 
@@ -177,7 +148,6 @@ impl BankerAlgorithm {
             }
         }
 
-        // let all_threads = finish.keys()
         loop {
             let mut found = false;
 
@@ -195,17 +165,6 @@ impl BankerAlgorithm {
                 // *value += 1; // 修改值
                 // println!("Updated key: {}, value: {}", key, value);
             }
-
-            // for process in &finish.keys() {
-            //     // 遍历没完成的线程，检查 request[i] < work[i],
-            //     // 每个资源检查一遍 总复杂度 O(M^N2)
-            //     if !finish[process] && self.can_finish(process, &work) {
-            //         // 回收回来，表示可以完成的，继续找
-            //         self.release_resources(process, &mut work);
-            //         finish.insert(process.clone(), true);
-            //         found = true;
-            //     }
-            // }
 
             if !found {
                 break;
