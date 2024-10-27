@@ -50,44 +50,40 @@ impl BankerAlgorithm {
         match kind {
             DeadlockKind::ByMutexBlocking => {
                 for mx in &psi.mutex_list {
-                    if mx.is_none() {
-                        continue;
+                    if let Some(mx) = mx{
+                        // let mx_ref = .as_ref();
+                        let mx = unsafe { &*(mx.as_ref() as *const _ as *const MutexBlocking) };
+                        let rid = mx.id;
+                        let rinner = mx.inner.readonly_access();
+                        available_res_map.insert(rid, if rinner.locked { 0 } else { 1 });
+
+                        if let Some(tid) = rinner.owner_tid {
+                            allocation_t2r_matrix
+                                .entry(tid)
+                                .or_default()
+                                .insert(rid, 1);
+                        }
+
+                        init_still_needs_matrix(&mut still_needs_t2r_matrix, &rinner.wait_queue, rid);
                     }
-
-                    let mx = mx.clone().unwrap();
-                    // let mx_ref = .as_ref();
-                    let mx = unsafe { &*(mx.as_ref() as *const _ as *const MutexBlocking) };
-                    let rid = mx.id;
-                    let rinner = mx.inner.readonly_access();
-                    available_res_map.insert(rid, if rinner.locked { 0 } else { 1 });
-
-                    if let Some(tid) = rinner.owner_tid {
-                        allocation_t2r_matrix
-                            .entry(tid)
-                            .or_insert(BTreeMap::new())
-                            .insert(rid, 1);
-                    }
-
-                    init_still_needs_matrix(&mut still_needs_t2r_matrix, &rinner.wait_queue, rid);
                 }
             }
             DeadlockKind::BySemaphore => {
-                for semap in &psi.semaphore_list {
-                    if semap.is_none() {
-                        continue;
-                    }
-                    let semap = &semap.clone().unwrap();
-                    let rid = semap.id;
-                    let rinner = semap.inner.readonly_access();
-                    available_res_map.insert(rid, rinner.count);
+                for sem in &psi.semaphore_list {
+                    if let Some(sem) = sem {
+                        let rid = sem.id;
+                        let rinner = sem.inner.readonly_access();
+                        available_res_map.insert(rid, rinner.count);
 
-                    for (tid, has_cnt) in &rinner.owner_map {
-                        allocation_t2r_matrix
-                            .entry(*tid)
-                            .or_insert(BTreeMap::new())
-                            .insert(rid, *has_cnt);
+                        for (tid, has_cnt) in &rinner.owner_map {
+                            allocation_t2r_matrix
+                                .entry(*tid)
+                                .or_default()
+                                .insert(rid, *has_cnt);
+                        }
+
+                        init_still_needs_matrix(&mut still_needs_t2r_matrix, &rinner.wait_queue, rid);
                     }
-                    init_still_needs_matrix(&mut still_needs_t2r_matrix, &rinner.wait_queue, rid);
                 }
             }
         };
@@ -105,7 +101,7 @@ impl BankerAlgorithm {
         let ps = current_process();
         let psi = ps.inner_exclusive_access();
 
-        BankerAlgorithm::inc_thread_needs(&mut self.still_needs_t2r_matrix,tid,rid);
+        Self::inc_thread_needs(&mut self.still_needs_t2r_matrix,tid,rid);
 
         let mut work: &mut BTreeMap<ResourceId, isize> = &mut self.available_res_map;
         let mut finish_map: BTreeMap<ThreadId, bool> = BTreeMap::new();
@@ -117,20 +113,11 @@ impl BankerAlgorithm {
                 let allow_finish = self
                     .allocation_t2r_matrix
                     .get(&tid)
-                    .map(|r| r.is_empty())
-                    .unwrap_or(true);
+                    .map_or(true,|r| r.is_empty());
                 // warn!(" tid {} has allocations , allow_finish : {}",tid,allow_finish);
                 finish_map.insert(tid, allow_finish);
             }
         }
-
-        //     // 内联的方法，避免外部借用问题
-        // fn can_finish(&self, tid: &ThreadId, work: &BTreeMap<ResourceId, isize>) -> bool {
-        //     let needs = self.still_needs_t2r_matrix.get(tid).unwrap_or(&BTreeMap::new());
-        //     needs.iter().all(|(&rid, &need)| {
-        //         work.get(&rid).map_or(true, |&avail| avail >= need)
-        //     })
-        // }
         
         loop {
             let mut found = false;
@@ -139,9 +126,9 @@ impl BankerAlgorithm {
             for (tid, can_finish) in finish_map.iter_mut() {
                 // 遍历没完成的线程，检查 request[i] < work[i],
                 // 每个资源检查一遍 总复杂度 O(M^N2)
-                if !*can_finish && BankerAlgorithm::can_finish(&self.still_needs_t2r_matrix,tid, &work) {
+                if !*can_finish && Self::can_finish(&self.still_needs_t2r_matrix,tid, &work) {
                     // 回收回来，表示可以完成的，继续找
-                    BankerAlgorithm::release_resources(&self.allocation_t2r_matrix,tid, &mut work);
+                    Self::release_resources(&self.allocation_t2r_matrix,tid, &mut work);
                     *can_finish = true;
                     found = true;
                 }
@@ -185,11 +172,10 @@ impl BankerAlgorithm {
     ) {
         still_needs_t2r_matrix
             .entry(tid)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(rid)
             .and_modify(|curr| *curr += 1)
             .or_insert(1);
     }
-
     
 }
