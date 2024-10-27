@@ -109,12 +109,14 @@ impl BankerAlgorithm {
         for thread in &psi.tasks {
             if let Some(tid) = thread.as_ref().and_then(|t| t.tid()) {
                 // 不全部初始化为false了， 只有 allocation_t2r > 0 的 为false，表示还占有资源
-                //  allow_finish : resoure == None || is_empty
-                let allow_finish = self
-                    .allocation_t2r_matrix
-                    .get(&tid)
-                    .map_or(true,|r| r.is_empty());
+                // BUG 忽略了wait.
+                //  allow_finish : ( resoure == None || is_empty ) && need == 0
+                // let allow_finish = self
+                //     .allocation_t2r_matrix
+                //     .get(&tid)
+                //     .map_or(true,|r| r.is_empty());
                 // warn!(" tid {} has allocations , allow_finish : {}",tid,allow_finish);
+                let allow_finish = false;
                 finish_map.insert(tid, allow_finish);
             }
         }
