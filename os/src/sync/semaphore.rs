@@ -76,7 +76,6 @@ impl Semaphore {
             let curr_task = current_task().unwrap();
             let tid = curr_task.tid().unwrap();
             let cnt = inner.count;
-            inner.wait_queue.push_back(curr_task);
 
             if current_process().inner_exclusive_access().enable_deadlock {
 
@@ -87,22 +86,22 @@ impl Semaphore {
                 );
 
                 drop(inner);
-                //后面要用
-                let banker = BankerAlgorithm::new(banker::DeadlockKind::BySemaphore);
-                // 用完了，弄回来
-                inner = self.inner.exclusive_access();
-                if !banker.is_safe() {
+                //后面banker要用
+                let mut banker = BankerAlgorithm::new(banker::DeadlockKind::BySemaphore);
+                if !banker.pre_safe_for_need(tid,rid) {
                     error!(
-                        " BANK BySemaphore DEAD_LOCK !!! tid {} -> seampid {} ",
+                        " BANK BySemaphore DEAD_LOCK  [ Semaphore ]  !!! tid {} -> seampid {} ",
                         tid,rid
                     );
                      // 没拿到锁，别等了。
-                    inner.wait_queue.pop_back();
+                    // inner.wait_queue.pop_back();
                     return DEAD_LOCK_MAYBE;
                 }
-                
+                // 用完了，弄回来
+                inner = self.inner.exclusive_access();
             }
 
+            inner.wait_queue.push_back(curr_task);
             inner.count -= 1;
             drop(inner);
             

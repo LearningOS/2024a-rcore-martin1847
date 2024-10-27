@@ -105,8 +105,6 @@ impl Mutex for MutexBlocking {
             let curr_task = current_task().unwrap();
             let tid = curr_task.tid().unwrap();
 
-            inner.wait_queue.push_back(curr_task);
-            drop(inner);
 
             if current_process().inner_exclusive_access().enable_deadlock {
                 warn!(
@@ -114,21 +112,22 @@ impl Mutex for MutexBlocking {
                     tid,self.id
                 );
 
-                // drop(inner);
-                let banker = BankerAlgorithm::new(DeadlockKind::ByMutexBlocking);
+                drop(inner);
+                let mut banker = BankerAlgorithm::new(DeadlockKind::ByMutexBlocking);
                
-                if !banker.is_safe() {
+                if !banker.pre_safe_for_need(tid,self.id) {
                     error!(
-                        " BANK ByMutexBlocking DEAD_LOCK_MAYBE Mutex/Lock  tid {} -> mutex id {}",
+                        " BANK ByMutexBlocking DEAD_LOCK [ Mutex ] !!!  tid {} -> mutex id {}",
                         tid,self.id
                     );
-                    // 没拿到锁，别等了。
-                    inner = self.inner.exclusive_access();
-                    inner.wait_queue.pop_back();
                     return DEAD_LOCK_MAYBE;
                 }
-                // inner = self.inner.exclusive_access();
+                inner = self.inner.exclusive_access();
             }
+
+
+            inner.wait_queue.push_back(curr_task);
+            drop(inner);
 
             // 标记Blocked ，不再参与调度。
             block_current_and_run_next();
