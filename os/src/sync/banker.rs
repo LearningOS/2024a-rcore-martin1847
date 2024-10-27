@@ -1,11 +1,13 @@
-use alloc::collections::btree_map::BTreeMap;
+use alloc::{
+    collections::{btree_map::BTreeMap, vec_deque::VecDeque},
+    sync::Arc,
+};
 
-use crate::task::current_process;
+use crate::task::{current_process, TaskControlBlock};
 
 use super::{MutexBlocking, ResourceId, ThreadId};
 
 pub enum DeadlockKind {
-    #[allow(dead_code)]
     ByMutexBlocking,
     BySemaphore,
 }
@@ -13,40 +15,45 @@ pub enum DeadlockKind {
 #[allow(dead_code)]
 pub struct BankerAlgorithm {
     // 1 . Available resources
-    available_res: BTreeMap<ResourceId, isize>,
-    // 2. Allocated resources to each process
-    allocation_t2r: BTreeMap<ThreadId, BTreeMap<ResourceId, usize>>,
-    // 3. Maximum resource needs of each process
+    available_res_map: BTreeMap<ResourceId, isize>,
+    // 2. Allocated resources to each process , matrix
+    allocation_t2r_matrix: BTreeMap<ThreadId, BTreeMap<ResourceId, usize>>,
+    // 3. Maximum resource  needs of each process , matrix
     // 我们这里每次只能申请一个资源，没有就会block，isize都是1了其实，可以退化成BTreeSet
-    max_needs_t2r: BTreeMap<ThreadId, BTreeMap<ResourceId, isize>>,
+    max_needs_t2r_matrix: BTreeMap<ThreadId, BTreeMap<ResourceId, isize>>,
 }
 #[allow(dead_code)]
 impl BankerAlgorithm {
-    /// 不做代码入侵，这里在检查的时刻，初始化整个状态矩阵
-    pub fn new(kind: DeadlockKind,tid: ThreadId,rid:ResourceId) -> Self {
-
-        let mut available_res = BTreeMap::<ResourceId, isize>::new();
-        // 2. Allocated resources to each process
-        let mut allocation_t2r = BTreeMap::<ThreadId, BTreeMap<ResourceId, usize>>::new();
-        // // 3. Maximum resource needs of each process
-        // 我们这里每次只能申请一个资源，没有就会block，isize都是1了其实，可以退化成BTreeSet
-        let mut max_needs_t2r = BTreeMap::<ThreadId, BTreeMap<ResourceId, isize>>::new();
+    /// 尽量减少代码入侵，这里在检查的时刻，初始化整个状态矩阵
+    pub fn new(kind: DeadlockKind) -> Self {
+        let mut available_res_map: BTreeMap<ResourceId, isize> = BTreeMap::new();
+        let mut allocation_t2r_matrix: BTreeMap<ThreadId, BTreeMap<ResourceId, usize>> =
+            BTreeMap::new();
+        let mut max_needs_t2r_matrix: BTreeMap<ThreadId, BTreeMap<ResourceId, isize>> =
+            BTreeMap::new();
 
         let ps = current_process();
         let psi = ps.inner_exclusive_access();
 
-
-        max_needs_t2r
-                                .entry(tid)
-                                .or_insert(BTreeMap::new())
-                                .entry(rid)
-                                .and_modify(|curr| *curr += 1)
-                                .or_insert(1);
+        fn update_max_needs(
+            max_needs_t2r: &mut BTreeMap<ThreadId, BTreeMap<ResourceId, isize>>,
+            wait_queue: &VecDeque<Arc<TaskControlBlock>>,
+            rid: ResourceId,
+        ) {
+            for wait_thread in wait_queue {
+                if let Some(tid) = wait_thread.tid() {
+                    max_needs_t2r
+                        .entry(tid)
+                        .or_insert_with(BTreeMap::new)
+                        .entry(rid)
+                        .and_modify(|curr| *curr += 1)
+                        .or_insert(1);
+                }
+            }
+        }
 
         match kind {
             DeadlockKind::ByMutexBlocking => {
-
-
                 for mx in &psi.mutex_list {
                     if mx.is_none() {
                         continue;
@@ -57,38 +64,19 @@ impl BankerAlgorithm {
                     let mx = unsafe { &*(mx.as_ref() as *const _ as *const MutexBlocking) };
                     let rid = mx.id;
                     let rinner = mx.inner.readonly_access();
-                    available_res.insert(rid, if rinner.locked { 0 } else {1});
+                    available_res_map.insert(rid, if rinner.locked { 0 } else { 1 });
 
                     if let Some(tid) = rinner.owner_tid {
-                        allocation_t2r
+                        allocation_t2r_matrix
                             .entry(tid)
                             .or_insert(BTreeMap::new())
                             .insert(rid, 1);
                     }
 
-                    for wait_thread in &rinner.wait_queue {
-                        if let Some(tid) = wait_thread.tid() {
-                            // 奇怪 wait_quene返回的可能不带tid，也是None
-                            // [kernel] Panicked at src/sync/banker.rs:71 called `Option::unwrap()` on a `None` value
-                            max_needs_t2r
-                                .entry(tid)
-                                .or_insert(BTreeMap::new())
-                                .entry(rid)
-                                .and_modify(|curr| *curr += 1)
-                                .or_insert(1);
-                        }
-                    }
-
+                    update_max_needs(&mut max_needs_t2r_matrix, &rinner.wait_queue, rid);
                 }
-                // Self {
-                //     available_res,
-                //     // max_needs_t2r: BTreeMap::new(),
-                //     allocation_t2r,
-                //     max_needs_t2r,
-                // }
             }
             DeadlockKind::BySemaphore => {
-
                 for semap in &psi.semaphore_list {
                     if semap.is_none() {
                         continue;
@@ -96,55 +84,46 @@ impl BankerAlgorithm {
                     let semap = &semap.clone().unwrap();
                     let rid = semap.id;
                     let rinner = semap.inner.readonly_access();
-                    available_res.insert(rid, rinner.count);
+                    available_res_map.insert(rid, rinner.count);
 
                     for (tid, has_cnt) in &rinner.owner_map {
-                        allocation_t2r
+                        allocation_t2r_matrix
                             .entry(*tid)
                             .or_insert(BTreeMap::new())
                             .insert(rid, *has_cnt);
                     }
-
-                    for wait_thread in &rinner.wait_queue {
-                        if let Some(tid) = wait_thread.tid() {
-                            // 奇怪 wait_quene返回的可能不带tid，也是None
-                            // [kernel] Panicked at src/sync/banker.rs:71 called `Option::unwrap()` on a `None` value
-                            max_needs_t2r
-                                .entry(tid)
-                                .or_insert(BTreeMap::new())
-                                .entry(rid)
-                                .and_modify(|curr| *curr += 1)
-                                .or_insert(1);
-                        }
-                    }
+                    update_max_needs(&mut max_needs_t2r_matrix, &rinner.wait_queue, rid);
                 }
-             
             }
         };
 
         Self {
-            available_res,
-            // max_needs_t2r: BTreeMap::new(),
-            allocation_t2r,
-            max_needs_t2r,
+            available_res_map,
+            allocation_t2r_matrix,
+            max_needs_t2r_matrix,
         }
     }
 
-
     pub fn is_safe(&self) -> bool {
-
         // return  true;
-
-        let mut work = self.available_res.clone();
-        let mut finish = BTreeMap::new();
 
         let ps = current_process();
         let psi = ps.inner_exclusive_access();
 
+        let mut work: BTreeMap<ResourceId, isize> = self.available_res_map.clone();
+        let mut finish_map: BTreeMap<ThreadId, bool> = BTreeMap::new();
+
         for thread in &psi.tasks {
-            if let Some(tid) = thread.as_ref().and_then(|t|t.tid()) {
-                // TODO 1.  不全部初始化为false了， 只有 allocation_t2r > 0 的 为false，表示还占有资源
-                finish.insert(tid, false);
+            if let Some(tid) = thread.as_ref().and_then(|t| t.tid()) {
+                // 不全部初始化为false了， 只有 allocation_t2r > 0 的 为false，表示还占有资源
+                //  allow_finish : resoure == None || is_empty
+                let allow_finish = self
+                    .allocation_t2r_matrix
+                    .get(&tid)
+                    .map(|r| r.is_empty())
+                    .unwrap_or(true);
+                // warn!(" tid {} has allocations , allow_finish : {}",tid,allow_finish);
+                finish_map.insert(tid, allow_finish);
             }
         }
 
@@ -152,7 +131,7 @@ impl BankerAlgorithm {
             let mut found = false;
 
             // O(N^2)
-            for (tid, can_finish) in finish.iter_mut() {
+            for (tid, can_finish) in finish_map.iter_mut() {
                 // 遍历没完成的线程，检查 request[i] < work[i],
                 // 每个资源检查一遍 总复杂度 O(M^N2)
                 if !*can_finish && self.can_finish(tid, &work) {
@@ -161,9 +140,6 @@ impl BankerAlgorithm {
                     *can_finish = true;
                     found = true;
                 }
-
-                // *value += 1; // 修改值
-                // println!("Updated key: {}, value: {}", key, value);
             }
 
             if !found {
@@ -172,12 +148,12 @@ impl BankerAlgorithm {
         }
 
         // 只要一个false那就是死锁
-        finish.values().all(|&f| f)
+        finish_map.values().all(|&f| f)
     }
 
     fn can_finish(&self, tid: &ThreadId, work: &BTreeMap<ResourceId, isize>) -> bool {
         // let need_map = ;
-        if let Some(need_map) = self.max_needs_t2r.get(tid){
+        if let Some(need_map) = self.max_needs_t2r_matrix.get(tid) {
             for (resource_id, &need) in need_map {
                 if need > work[resource_id] {
                     return false;
@@ -188,7 +164,7 @@ impl BankerAlgorithm {
     }
 
     fn release_resources(&self, tid: &ThreadId, work: &mut BTreeMap<ResourceId, isize>) {
-        if let Some(alloc_map) = self.allocation_t2r.get(tid){
+        if let Some(alloc_map) = self.allocation_t2r_matrix.get(tid) {
             for (resource_id, &allocated) in alloc_map {
                 *work.get_mut(resource_id).unwrap() += allocated as isize;
             }

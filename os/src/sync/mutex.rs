@@ -74,7 +74,7 @@ pub struct MutexBlockingInner {
     // 在这种情况下，内核态的共享数据访问就仍在 UPSafeCell 的框架之内，只要使用它就能保证互斥访问。
     pub locked: bool,
     pub wait_queue: VecDeque<Arc<TaskControlBlock>>,
-    // 当前线程拥有者id
+    // 当前锁，持有者线程id
     pub owner_tid : Option<ThreadId>
 }
 
@@ -105,28 +105,31 @@ impl Mutex for MutexBlocking {
             let curr_task = current_task().unwrap();
             let tid = curr_task.tid().unwrap();
 
+            inner.wait_queue.push_back(curr_task);
+            drop(inner);
+
             if current_process().inner_exclusive_access().enable_deadlock {
                 warn!(
-                    "down try to check is_deadlock_safe after Mutex/Lock  tid {} -> mutex id {}",
+                    "down try to lock MutexBlocking tid {} -> mutex id {}",
                     tid,self.id
                 );
 
-                drop(inner);
-                let banker = BankerAlgorithm::new(DeadlockKind::ByMutexBlocking,tid,self.id);
-
+                // drop(inner);
+                let banker = BankerAlgorithm::new(DeadlockKind::ByMutexBlocking);
                
                 if !banker.is_safe() {
                     error!(
                         " BANK ByMutexBlocking DEAD_LOCK_MAYBE Mutex/Lock  tid {} -> mutex id {}",
                         tid,self.id
                     );
+                    // 没拿到锁，别等了。
+                    inner = self.inner.exclusive_access();
+                    inner.wait_queue.pop_back();
                     return DEAD_LOCK_MAYBE;
                 }
-                inner = self.inner.exclusive_access();
+                // inner = self.inner.exclusive_access();
             }
 
-            inner.wait_queue.push_back(curr_task);
-            drop(inner);
             // 标记Blocked ，不再参与调度。
             block_current_and_run_next();
         } else {

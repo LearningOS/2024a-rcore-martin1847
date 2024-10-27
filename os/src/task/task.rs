@@ -2,7 +2,6 @@
 
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
-use crate::sync::ThreadId;
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
@@ -92,7 +91,7 @@ impl TaskControlBlock {
     }
 
     /// get the thread id
-    pub fn tid(&self) -> Option<ThreadId> {
+    pub fn tid(&self) -> Option<usize> {
         let inner =  self.inner.exclusive_access();
         inner.res.as_ref().map(|u|u.tid)
     }

@@ -14,6 +14,6 @@ const DEAD_LOCK_MAYBE:isize = -0xDEAD;
 mod banker;
 
 /// thread id 
-pub type ThreadId = usize;
+type ThreadId = usize;
 /// Resource Id
-pub type ResourceId = usize;
+type ResourceId = usize;

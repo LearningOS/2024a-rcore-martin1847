@@ -262,7 +262,6 @@ pub fn sys_condvar_wait(condvar_id: usize, mutex_id: usize) -> isize {
 /// 开启死锁检测功能后， mutex_lock 和 semaphore_down 如果检测到死锁， 应拒绝相应操作并返回 -0xDEAD (十六进制值)。
 /// 简便起见可对 mutex 和 semaphore 分别进行检测，无需考虑二者 (以及 waittid 等) 混合使用导致的死锁。
 /// 返回值：如果出现了错误则返回 -1，否则返回 0。
-
 // 可能的错误
 // 参数不合法
 
