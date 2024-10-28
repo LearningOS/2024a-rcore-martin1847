@@ -20,7 +20,7 @@ pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
 use page_table::PTEFlags;
 pub use page_table::{
     current_user_table,translated_va_to_pa,translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
+    PageTableEntry, UserBuffer, UserBufferIterator,write_to_user_virt_target
 };
 
 /// initiate heap allocator, frame allocator and kernel space

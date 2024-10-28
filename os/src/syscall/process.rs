@@ -1,11 +1,10 @@
 use crate::{
-    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str, translated_va_to_pa},
+    mm::{translated_ref, translated_refmut, translated_str},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
-    }, timer::get_time_us,
+    }
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -22,7 +21,7 @@ pub struct TaskInfo {
     /// Task status in it's life cycle
     status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    syscall_times: [u32; crate::config::MAX_SYSCALL_NUM],
     /// Total running time of task
     time: usize,
 }
@@ -164,27 +163,13 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    let ts_va = _ts as usize;
-    let ts_page_start = ts_va & !(PAGE_SIZE - 1);
-    let ts_page_end = ts_page_start + PAGE_SIZE;
-    // let ts_end = ts_va + core::mem::size_of::<TimeVal>();
-
-    if ts_va + core::mem::size_of::<TimeVal>() > ts_page_end {
-        // TimeVal 结构体跨越了页边界，返回错误
-        return -1;
-    }
-
-    let pa = translated_va_to_pa(current_user_token(), ts_va);
-    let ts = pa.0 as *mut TimeVal;
-    let us = get_time_us();
-    unsafe {
-        *ts = TimeVal {
-            sec: us / 1_000_000,
-            usec: us % 1_000_000,
-        };
-    }
-    0
+pub fn sys_get_time(user_ptr: *mut TimeVal, _tz: usize) -> isize {
+    let us = crate::timer::get_time_us();
+    let info = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    write_to_user_space_ptr(&info, user_ptr)
 }
 
 /// task_info syscall
@@ -251,4 +236,15 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
     -1
+}
+
+
+// this need the repr of T is same in both kernel and use side.
+// It is better to use the repr[C] to compatibility with the Linux.
+fn write_to_user_space_ptr<T>(src: &T, user_ptr: *mut T) -> isize {
+    let bytes = unsafe {
+        core::slice::from_raw_parts(src as *const _ as *const u8, core::mem::size_of::<T>())
+    };
+    crate::mm::write_to_user_virt_target(bytes, user_ptr as *mut u8);
+    0
 }

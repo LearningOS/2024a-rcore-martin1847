@@ -287,3 +287,29 @@ pub fn translated_va_to_pa(token: usize, va_ptr: usize) -> PhysAddr {
 pub fn current_user_table() -> PageTable {
     PageTable::from_token(crate::task::current_user_token())
 }
+
+
+/// Copy a bytes[u8] array with to a user space virt ptr (target)
+pub fn write_to_user_virt_target(bytes: &[u8],target: *mut u8)  {
+    let page_table = PageTable::from_token(crate::task::current_user_token());
+    let mut start = target as usize;
+    let end = start + bytes.len();
+    let mut bytes_index = 0;
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        let ppn = page_table.translate(vpn).unwrap().ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        let end_va_index = if end_va.page_offset() == 0 { crate::config::PAGE_SIZE} else{
+            end_va.page_offset()
+        };
+        // debug!("write_byte_buffer use token {} : VirtAddr {}->{}",token,start,end_va_index);
+        let len = end_va_index - start_va.page_offset();
+        let ppn_part = &mut ppn.get_bytes_array()[start_va.page_offset()..end_va_index];
+        ppn_part.copy_from_slice(&bytes[bytes_index..bytes_index+len]);
+        bytes_index +=len;
+        start = end_va.into();
+    }
+}
