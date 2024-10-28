@@ -210,6 +210,7 @@ pub fn current_add_signal(signal: SignalFlags) {
 /// the inactive(blocked) tasks are removed when the PCB is deallocated.(called by exit_current_and_run_next)
 /// 从TM中解绑，释放内存；释放注册的定时器/目前看到sleep会用到
 pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
+    // 从TaskManager中移除
     remove_task(Arc::clone(&task));
     trace!("kernel: remove_inactive_task .. remove_timer");
     remove_timer(Arc::clone(&task));
