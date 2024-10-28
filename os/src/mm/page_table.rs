@@ -1,6 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::task::current_user_token;
 
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
@@ -193,9 +194,9 @@ pub fn current_user_table() -> PageTable {
 }
 
 
-/// Copy a bytes[u8] array with to a target ptr
-pub fn write_bytes_to_virt_target(token: usize, bytes: &[u8],target: *mut u8)  {
-    let page_table = PageTable::from_token(token);
+/// Copy a bytes[u8] array with to a user space virt ptr (target)
+pub fn write_to_user_virt_target(bytes: &[u8],target: *mut u8)  {
+    let page_table = PageTable::from_token(current_user_token());
     let mut start = target as usize;
     let end = start + bytes.len();
     let mut bytes_index = 0;

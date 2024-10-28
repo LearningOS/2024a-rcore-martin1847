@@ -2,9 +2,9 @@
 
 use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
-    mm::{current_user_table, translated_va_to_pa, write_bytes_to_virt_target, MapPermission, MemorySet, VirtPageNum},
+    mm::{current_user_table, write_to_user_virt_target, MapPermission, MemorySet, VirtPageNum},
     task::{
-        change_program_brk, current_task, current_user_token, exit_current_and_run_next,
+        change_program_brk, current_task, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
@@ -42,89 +42,98 @@ pub fn sys_yield() -> isize {
     0
 }
 
+
+// get_time_us TimeVal { sec: 2, usec: 895192 } bytes [2, 0, 0, 0, 0, 0, 0, 0, 216, 168, 13, 0, 0, 0, 0, 0]
+// 24000 & 0xFF = 192 , 24000 >> 8 = 93
+// TimeVal { sec: 3, usec: 24000 } bytes [3, 0, 0, 0, 0, 0, 0, 0, 192, 93, 0, 0, 0, 0, 0, 0]
+// debug!("get_time_us {:?} bytes {:?} ",res,bytes);
+// let bytes = unsafe {
+//     core::slice::from_raw_parts(
+//         &res as *const _ as *const u8,
+//         core::mem::size_of::<TimeVal>(),
+//     )
+// };
+// write_to_user_virt_target(current_user_token(), bytes, va_ptr as *mut u8);
+// let pa = translated_va_to_pa(current_user_token(), ts_va);
+// let ts = pa.0 as *mut TimeVal;
+
+// unsafe {
+//     *ts = TimeVal {
+//         sec: res.sec,
+//         usec: res.usec,
+//     };
+// }
+// 0
+// -1
+// }
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-
-    
-    // let ts_page_start = ts_va & !(PAGE_SIZE - 1);
-    // let ts_page_end = ts_page_start + PAGE_SIZE;
-    // let ts_end = ts_va + core::mem::size_of::<TimeVal>();
-
-    // if ts_va + size_of::<TimeVal>() > ts_page_end {
-    //     // TimeVal 结构体跨越了页边界，返回错误
-    //     return -1;
-    // }
+pub fn sys_get_time(user_ptr: *mut TimeVal, _tz: usize) -> isize {
     let us = get_time_us();
-    let res = TimeVal {
+    let info = TimeVal {
         sec: us / 1_000_000,
         usec: us % 1_000_000,
     };
-
-  
-
-    // get_time_us TimeVal { sec: 2, usec: 895192 } bytes [2, 0, 0, 0, 0, 0, 0, 0, 216, 168, 13, 0, 0, 0, 0, 0] 
-    // 24000 & 0xFF = 192 , 24000 >> 8 = 93
-    // TimeVal { sec: 3, usec: 24000 } bytes [3, 0, 0, 0, 0, 0, 0, 0, 192, 93, 0, 0, 0, 0, 0, 0]
-    // debug!("get_time_us {:?} bytes {:?} ",res,bytes);
-    let bytes = unsafe {
-        core::slice::from_raw_parts(
-            &res as *const TimeVal as *const u8,
-            core::mem::size_of::<TimeVal>(),
-        )
-    };
-    let ts_va = _ts as usize;
-    write_bytes_to_virt_target(current_user_token(), bytes, ts_va as *mut u8);
-    // let pa = translated_va_to_pa(current_user_token(), ts_va);
-    // let ts = pa.0 as *mut TimeVal;
-    
-    // unsafe {
-    //     *ts = TimeVal {
-    //         sec: res.sec,
-    //         usec: res.usec,
-    //     };
-    // }
-    0
-    // -1
+    write_to_user_space_ptr(&info, user_ptr)
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-
-    // debug!("kernel TaskInfo {:?}", _ti);
-
-    let va_ptr = _ti as usize;
-    let ts_page_start = va_ptr & !(PAGE_SIZE - 1);
-    let ts_page_end = ts_page_start + PAGE_SIZE;
-
-    if va_ptr + core::mem::size_of::<TaskInfo>() > ts_page_end {
-        // TaskInfo 结构体跨越了页边界，返回错误
-        error!(" [`TaskInfo`] is splitted by two pages and not the  #[repr(C)] , not support!");
-        return -1;
-    }
-
-    let curr_ms = get_time_ms();
+pub fn sys_task_info(user_ptr: *mut TaskInfo) -> isize {
     let task = crate::task::current_task();
-    let pa = translated_va_to_pa(current_user_token(), va_ptr).0 as *mut TaskInfo;
-    let ti = unsafe { pa.as_mut().unwrap() };
-    ti.time = curr_ms - task.running_at_ms;
-    ti.status = TaskStatus::Running;
-
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            task.syscall_times.as_ptr(),
-            ti.syscall_times.as_mut_ptr(),
-            task.syscall_times.len(),
-        )
+    let info = TaskInfo {
+        status: TaskStatus::Running,
+        time: get_time_ms() - task.running_at_ms,
+        syscall_times: task.syscall_times,
     };
-    0
+    warn!("kernel write_to_user_space_ptr {:?}", user_ptr);
+    write_to_user_space_ptr(&info, user_ptr)
+}
 
-    // -1
+// debug!("kernel TaskInfo {:?}", _ti);
+
+// let va_ptr = _ti as usize;
+// let ts_page_start = va_ptr & !(PAGE_SIZE - 1);
+// let ts_page_end = ts_page_start + PAGE_SIZE;
+
+// if va_ptr + core::mem::size_of::<TaskInfo>() > ts_page_end {
+//     // TaskInfo 结构体跨越了页边界，返回错误
+//     error!(" [`TaskInfo`] is splitted by two pages and not the  #[repr(C)] , not support!");
+//     return -1;
+// }
+
+// let bytes = unsafe {
+//     core::slice::from_raw_parts(
+//         &info as *const _ as *const u8,
+//         core::mem::size_of::<TaskInfo>(),
+//     )
+// };
+
+// write_to_user_virt_target(current_user_token(), bytes, va_ptr as *mut u8);
+// let pa = translated_va_to_pa(current_user_token(), va_ptr).0 as *mut TaskInfo;
+// let ti = unsafe { pa.as_mut().unwrap() };
+// ti.time = curr_ms - task.running_at_ms;
+// ti.status = TaskStatus::Running;
+
+// unsafe {
+//     core::ptr::copy_nonoverlapping(
+//         task.syscall_times.as_ptr(),
+//         ti.syscall_times.as_mut_ptr(),
+//         task.syscall_times.len(),
+//     )
+// };
+
+// this need the repr of T is same in both kernel and use side.
+// It is better to use the repr[C] to compatibility with the Linux.
+fn write_to_user_space_ptr<T>(src: &T, user_ptr: *mut T) -> isize {
+    let bytes = unsafe {
+        core::slice::from_raw_parts(src as *const _ as *const u8, core::mem::size_of::<T>())
+    };
+    write_to_user_virt_target(bytes, user_ptr as *mut u8);
+    0
 }
 
 // YOUR JOB: Implement mmap.
@@ -147,7 +156,6 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
         return -1;
     }
 
-
     // -1
     let pages = (len - 1 + PAGE_SIZE) / PAGE_SIZE;
     let table = current_user_table();
@@ -156,7 +164,7 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
         let vpn = VirtPageNum(vpn_start + i);
         // vpn.0
         debug!("sys_mmap: try to mapping vpn: {:?} / pages {}!", vpn, pages);
-        if table.translate(vpn).is_some_and(|p|p.is_valid()) {
+        if table.translate(vpn).is_some_and(|p| p.is_valid()) {
             warn!(
                 "sys_mmap: [start, start + len) already existed mapping !: {:?} !",
                 vpn
@@ -206,7 +214,7 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     let vpn_start = start / PAGE_SIZE;
     for i in 0..pages {
         let vpn = VirtPageNum(vpn_start + i);
-        if table.translate(vpn).is_some_and(|p|!p.is_valid()) {
+        if table.translate(vpn).is_some_and(|p| !p.is_valid()) {
             warn!(
                 "kernel: [start, start + len) has unmapped : {}!",
                 vpn_start + i
