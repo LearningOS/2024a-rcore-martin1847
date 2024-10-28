@@ -6,11 +6,10 @@ use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
     // loader::get_app_data_by_name, 移除：应用加载器 loader 子模块，本章开始从文件系统中加载应用
-    mm::{current_user_table, translated_refmut, translated_str, translated_va_to_pa, MapPermission, MemorySet, VirtPageNum},
+    mm::{current_user_table, translated_refmut, translated_str, MapPermission, MemorySet, VirtPageNum},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next, stride::{Stride, MIN_PRIORITY}, suspend_current_and_run_next, TaskStatus
-    },
-    timer::{get_time_ms, get_time_us},
+    }
 };
 
 #[repr(C)]
@@ -123,55 +122,28 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-    let ts_va = _ts as usize;
-    let ts_page_start = ts_va & !(PAGE_SIZE - 1);
-    let ts_page_end = ts_page_start + PAGE_SIZE;
-    // let ts_end = ts_va + core::mem::size_of::<TimeVal>();
-
-    if ts_va + core::mem::size_of::<TimeVal>() > ts_page_end {
-        // TimeVal 结构体跨越了页边界，返回错误
-        return -1;
-    }
-
-    let pa = translated_va_to_pa(current_user_token(), ts_va);
-    let ts = pa.0 as *mut TimeVal;
-    let us = get_time_us();
-    unsafe {
-        *ts = TimeVal {
-            sec: us / 1_000_000,
-            usec: us % 1_000_000,
-        };
-    }
-    0
+pub fn sys_get_time(user_ptr: *mut TimeVal, _tz: usize) -> isize {
+    let us = crate::timer::get_time_us();
+    let info = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    write_to_user_space_ptr(&info, user_ptr)
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-
-    // debug!("kernel TaskInfo {:?}", _ti);
-    let curr_ms = get_time_ms();
+pub fn sys_task_info(user_ptr: *mut TaskInfo) -> isize {
     let task = crate::task::current_task().unwrap();
-    let task_inner = &task.inner_exclusive_access();
-    let pa = translated_va_to_pa(current_user_token(), _ti as usize).0 as *mut TaskInfo;
-    let ti = unsafe { pa.as_mut().unwrap() };
-    ti.time = curr_ms - task_inner.running_at_ms;
-    ti.status = TaskStatus::Running;
-
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            task_inner.syscall_times.as_ptr(),
-            ti.syscall_times.as_mut_ptr(),
-            task_inner.syscall_times.len(),
-        )
+    let task = &task.inner_exclusive_access();
+    let info = TaskInfo {
+        status: TaskStatus::Running,
+        time: crate::timer::get_time_ms() - task.running_at_ms,
+        syscall_times: task.syscall_times,
     };
-    0
-
-    // -1
+    warn!("kernel write sys_task_info to_user_space_ptr {:?}", user_ptr);
+    write_to_user_space_ptr(&info, user_ptr)
 }
 
 // YOUR JOB: Implement mmap.
@@ -387,4 +359,15 @@ pub fn sys_set_priority(prio: isize) -> isize {
     let mut task_inner = current_task.inner_exclusive_access();
     task_inner.stride = Stride::new(prio);
     prio
+}
+
+
+// this need the repr of T is same in both kernel and use side.
+// It is better to use the repr[C] to compatibility with the Linux.
+fn write_to_user_space_ptr<T>(src: &T, user_ptr: *mut T) -> isize {
+    let bytes = unsafe {
+        core::slice::from_raw_parts(src as *const _ as *const u8, core::mem::size_of::<T>())
+    };
+    crate::mm::write_to_user_virt_target(bytes, user_ptr as *mut u8);
+    0
 }
