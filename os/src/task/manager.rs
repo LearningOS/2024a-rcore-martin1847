@@ -4,6 +4,7 @@
 
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
+// use alloc::collections::binary_heap::BinaryHeap;
 // use alloc::borrow::ToOwned;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -11,6 +12,7 @@ use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    // ready_heap: BinaryHeap<Arc<TaskControlBlock>>,
 }
 
 /// A simple FIFO scheduler.
@@ -19,15 +21,20 @@ impl TaskManager {
     pub fn new() -> Self {
         Self {
             ready_queue: VecDeque::new(),
+            // ready_heap: BinaryHeap::new()
         }
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
         self.ready_queue.push_back(task);
+        // self.ready_heap.push(task);
     }
+
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        
+        // self.ready_heap.pop()
+    // }
+    // // fn fetch_by_queen() ->  Option<Arc<TaskControlBlock>>{
         let dq = &mut self.ready_queue;
         if dq.is_empty() {
             return  None;
@@ -43,8 +50,6 @@ impl TaskManager {
         
         // warn!("found min_index stride {} -> {:?}",min_index,dq.get(min_index).unwrap().inner_readonly_access().stride);
         dq.remove(min_index)
-        
-        
         // warn!("found min_index stride {:?} / max {:?}, default : {:?}"
         // ,dq.get(min_index).unwrap().inner_readonly_access().stride
         // ,dq.get(max_index).unwrap().inner_readonly_access().stride
@@ -52,6 +57,8 @@ impl TaskManager {
         // );
         // self.ready_queue.pop_front()
     }
+
+    
 }
 
 lazy_static! {

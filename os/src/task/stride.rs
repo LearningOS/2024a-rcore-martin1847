@@ -2,6 +2,8 @@ use core::cmp::Ordering;
 
 use crate::mm::StepByOne;
 
+use super::TaskControlBlock;
+
 /// https://rcore-os.cn/rCore-Tutorial-Book-v3/chapter5/5exercise.html#stride
 /// the Stride for each TCB
 #[derive(Debug)]
@@ -92,5 +94,29 @@ impl PartialEq for Stride {
 impl StepByOne for Stride {
     fn step(&mut self) {
         self.pass += self.step;
+    }
+}
+
+
+
+impl PartialEq for TaskControlBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner_readonly_access().stride ==  other.inner_readonly_access().stride
+    }
+}
+
+impl PartialOrd for TaskControlBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // 默认BinaryHeap大顶，咱们换下 other -> self
+        other.inner_readonly_access().stride.partial_cmp(&self.inner_readonly_access().stride)
+    }
+}
+impl Eq for TaskControlBlock {
+    
+}
+
+impl Ord for TaskControlBlock {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
