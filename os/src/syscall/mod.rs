@@ -31,6 +31,7 @@ mod process;
 use fs::*;
 use process::*;
 /// handle syscall exception with `syscall_id` and other arguments
+#[no_mangle]
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
     // TASK_MANAGER.
     crate::task::inc_task_sys_call(syscall_id);

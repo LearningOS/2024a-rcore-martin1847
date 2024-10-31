@@ -75,6 +75,8 @@ impl TaskManager {
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch4, we load apps statically, so the first task is a real app.
+    
+    #[no_mangle]
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
@@ -91,6 +93,7 @@ impl TaskManager {
     }
 
     /// Change the status of current `Running` task into `Ready`.
+    #[no_mangle]
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
@@ -98,6 +101,7 @@ impl TaskManager {
     }
 
     /// Change the status of current `Running` task into `Exited`.
+    #[no_mangle]
     fn mark_current_exited(&self) {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
@@ -107,6 +111,7 @@ impl TaskManager {
     /// Find next task to run and return task id.
     ///
     /// In this case, we only return the first `Ready` task in task list.
+    #[no_mangle]
     fn find_next_task(&self) -> Option<usize> {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -116,18 +121,22 @@ impl TaskManager {
     }
 
     /// Get the current 'Running' task's token.
+    #[no_mangle]
     fn get_current_token(&self) -> usize {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_user_token()
     }
 
     /// Get the current 'Running' task's trap contexts.
+    #[no_mangle]
     fn get_current_trap_cx(&self) -> &'static mut TrapContext {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
     /// Change the current 'Running' task's program break
+    
+    #[no_mangle]
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
@@ -136,6 +145,8 @@ impl TaskManager {
 
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
+    
+    #[no_mangle]
     fn run_next_task(&self) {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();

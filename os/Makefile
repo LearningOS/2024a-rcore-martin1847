@@ -21,4 +21,13 @@ run: kernel
 		-bios $(BOOTLOADER) \
 		-kernel $(KERNEL_ELF)
 
+debug: clean kernel
+	echo "debug at :1234  $(KERNEL_ELF)"
+	qemu-system-riscv64 \
+		-machine virt \
+		-nographic \
+		-bios $(BOOTLOADER) \
+		-kernel $(KERNEL_ELF) -s -S
+
+
 .PHONY: build kernel clean run
