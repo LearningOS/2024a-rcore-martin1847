@@ -6,7 +6,7 @@ use crate::{
     loader::get_app_data_by_name,
     mm::{current_user_table, translated_refmut, translated_str, MapPermission, MemorySet, VirtPageNum},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next, stride::{Stride, MIN_PRIORITY}, suspend_current_and_run_next, TaskStatus
+        add_task, current_task, current_user_token, exit_current_and_run_next, stride::{Stride, MIN_PRIORITY}, suspend_current_and_run_next, TaskControlBlock, TaskStatus
     }
 };
 
@@ -343,16 +343,23 @@ pub fn sys_spawn(path: *const u8) -> isize {
 
     let elf_data = elf_data.unwrap();
 
+    debug!("[ spawn ] use TaskControlBlock new ");
+    let new_task = Arc::new(TaskControlBlock::new(elf_data));
     let current_task = current_task().unwrap();
-    // spawn 不必 像 fork 一样复制父进程的地址空间。
-    // 被替换为ELF，留个站位符即可 
-    debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
-    let new_task = current_task.fork_with(0.into(),MemorySet::new_bare());
+    current_task.inner_exclusive_access().children.push(new_task.clone());
+    new_task.inner_exclusive_access().parent = Some(Arc::downgrade(&current_task));
 
-    // let n_pid = &new_task.pid;
+    // // spawn 不必 像 fork 一样复制父进程的地址空间。
+    // // 被替换为ELF，留个站位符即可 
+    // debug!("[ spawn ] use empty trap_cx_ppn /  MemorySet");
+    // let new_task = current_task.fork_with(0.into(),MemorySet::new_bare());
+    // new_task.exec(elf_data);
 
-    // let new_pid = new_task.pid.0;
-    new_task.exec(elf_data);
+    let n_pid = new_task.pid.0;
+    add_task(new_task);
+    n_pid as isize
+
+
     // modify trap context of new_task, because it returns immediately after switching
     // let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
     // // we do not have to move to next instruction since we have done it before
@@ -360,9 +367,6 @@ pub fn sys_spawn(path: *const u8) -> isize {
     // trap_cx.x[10] = 0;  //x[10] is a0 reg
     // add new task to scheduler
 
-    let n_pid = new_task.pid.0;
-    add_task(new_task);
-    n_pid as isize
 
     // let pid = sys_fork();
 
