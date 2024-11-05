@@ -160,6 +160,8 @@ impl MemorySet {
             None,
         );
         info!("mapping memory-mapped registers");
+        // 在 config 子模块中我们硬编码 Qemu 上的 VirtIO 总线的 MMIO 地址区间（起始地址，长度）。在创建内核地址空间的时候需要建立页表映射：
+        // 透明的恒等映射，从而让内核可以兼容于直接访问物理地址的设备驱动库
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(

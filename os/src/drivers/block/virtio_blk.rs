@@ -42,6 +42,7 @@ impl VirtIOBlock {
     pub fn new() -> Self {
         unsafe {
             Self(UPSafeCell::new(
+                // Virtio MMIO 区间左端 VIRTIO0 开始转化为一个 &mut VirtIOHeader 就可以在该平台上访问这些设备寄存器了。
                 VirtIOBlk::<VirtioHal>::new(&mut *(VIRTIO0 as *mut VirtIOHeader)).unwrap(),
             ))
         }
@@ -50,6 +51,7 @@ impl VirtIOBlock {
 
 pub struct VirtioHal;
 
+/// 类似 基于分页内存管理的地址空间功能。
 impl Hal for VirtioHal {
     /// VirtIO 设备需要占用部分内存作为一个公共区域从而更好的和 CPU 进行合作。
     /// 这就像 MMU 需要在内存中保存多级页表才能和 CPU 共同实现分页机制一样。
@@ -60,6 +62,7 @@ impl Hal for VirtioHal {
         // virtio_dma_alloc/dealloc 需要分配/回收数个 连续 的物理页帧，
         // 而我们的 frame_alloc 是逐个分配，严格来说并不保证分配的连续性。
         // 幸运的是，这个过程只会发生在内核初始化阶段，因此能够保证连续性。
+        // 这时候只有内核单线程再运行。
         for i in 0..pages {
             let frame = frame_alloc().unwrap();
             if i == 0 {

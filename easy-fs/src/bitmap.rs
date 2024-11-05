@@ -1,6 +1,7 @@
 use super::{get_block_cache, BlockDevice, BLOCK_SZ};
 use alloc::sync::Arc;
 /// A bitmap block
+/// 打包了一组 64 bits，于是整个数组包含 64*64 = 4096 bits，且可以以组为单位进行操作。
 type BitmapBlock = [u64; 64];
 /// Number of bits in a block
 const BLOCK_BITS: usize = BLOCK_SZ * 8;

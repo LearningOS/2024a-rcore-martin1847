@@ -43,8 +43,17 @@ impl EasyFileSystem {
         let inode_area_blocks =
             ((inode_num * core::mem::size_of::<DiskInode>() + BLOCK_SZ - 1) / BLOCK_SZ) as u32;
         let inode_total_blocks = inode_bitmap_blocks + inode_area_blocks;
+        // -1 对应的是超级块SuperBlock；
         let data_total_blocks = total_blocks - 1 - inode_total_blocks;
+        // 我们希望位图覆盖后面的数据块的前提下数据块尽量多。
+        // 设数据的位图占据x个块，则该位图能管理的数据块不超过4096x。
+        // 数据区域总共data_total_blocks个块，除了数据位图的块剩下都是数据块，
+        // 也就是位图管理的数据块为data_total_blocks-x个块。
+        // 于是有不等式data_total_blocks-x<=4096x，得到x>=data_total_blocks/4097。
+        // 数据块尽量多也就要求位图块数尽量少，于是取x的最小整数解也就是data_total_blocks/4097上取整，也就是代码中的表达式。
+
         let data_bitmap_blocks = (data_total_blocks + 4096) / 4097;
+        // bitmap能覆盖的情况下，最多的data_blocks
         let data_area_blocks = data_total_blocks - data_bitmap_blocks;
         let data_bitmap = Bitmap::new(
             (1 + inode_bitmap_blocks + inode_area_blocks) as usize,

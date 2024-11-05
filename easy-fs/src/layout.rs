@@ -80,11 +80,20 @@ type IndirectBlock = [u32; BLOCK_SZ / 4];
 /// A data block
 type DataBlock = [u8; BLOCK_SZ];
 /// A disk inode
+/// 为了充分利用空间，我们将 DiskInode 的大小设置为 128 字节，每个块正好能够容纳 4 个 DiskInode
+/// 128 * 8 * 4 = 4096
+/// 128  = u32(1+28+2+1) = 32*4
+/// 每个数据块 512 字节
 #[repr(C)]
 pub struct DiskInode {
     pub size: u32,
+    // 直接索引， 28 * 512B =14336 = 14KiB
     pub direct: [u32; INODE_DIRECT_COUNT],
+    // 这个一级索引块中的每个 u32 都用来指向数据块区域中一个保存该文件内容的数据块，因此，最多能够索引
+    // 512/4 = 128 * 512B = 65536 = 64Kib ， 到这里最多装 14+64 = 78KiB的数据了
     pub indirect1: u32,
+    // 超过78KiB的时候， 二级索引块中的每个 u32 指向一个不同的一级索引块，这些一级索引块也位于数据块区域中。
+    // 512/4 = 128 * 一级64Kib = 8MiB
     pub indirect2: u32,
     type_: DiskInodeType,
 }
@@ -396,13 +405,15 @@ impl DiskInode {
 /// A directory entry
 #[repr(C)]
 pub struct DirEntry {
+    // c风格，末尾带个 \0
     name: [u8; NAME_LENGTH_LIMIT + 1],
     inode_id: u32,
     //TODO 这里没有用到暂时
-    link_times:u32
+    // link_times:u32
 }
 /// Size of a directory entry 28 + 4
-pub const DIRENT_SZ: usize = 32 + 32;
+/// 这里加link_times,浪费了 32 + 32 一倍的内存。。
+pub const DIRENT_SZ: usize = 28 + 4;
 
 impl DirEntry {
     /// Create an empty directory entry
@@ -410,7 +421,7 @@ impl DirEntry {
         Self {
             name: [0u8; NAME_LENGTH_LIMIT + 1],
             inode_id: 0,
-            link_times:0
+            // link_times:0
         }
     }
     /// Crate a directory entry from name and inode number
@@ -421,7 +432,7 @@ impl DirEntry {
         Self {
             name: bytes,
             inode_id,
-            link_times:0
+            // link_times:0
         }
     }
     /// Serialize into bytes
