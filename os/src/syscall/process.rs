@@ -4,8 +4,8 @@ use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     mm::{current_user_table, write_to_user_virt_target, MapPermission, MemorySet, VirtPageNum},
     task::{
-        change_program_brk, current_task, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        change_program_brk, current_task, exit_current_and_run_next, suspend_current_and_run_next,
+        TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -42,7 +42,6 @@ pub fn sys_yield() -> isize {
     0
 }
 
-
 // get_time_us TimeVal { sec: 2, usec: 895192 } bytes [2, 0, 0, 0, 0, 0, 0, 0, 216, 168, 13, 0, 0, 0, 0, 0]
 // 24000 & 0xFF = 192 , 24000 >> 8 = 93
 // TimeVal { sec: 3, usec: 24000 } bytes [3, 0, 0, 0, 0, 0, 0, 0, 192, 93, 0, 0, 0, 0, 0, 0]
@@ -67,6 +66,28 @@ pub fn sys_yield() -> isize {
 // -1
 // }
 
+//https://ssl.cdn.maodouketang.com/FoyY6KTxcvuwMfIgvnXb-4g3qX5v
+// pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+//     let buffers = crate::mm::translated_byte_buffer(
+//         crate::task::current_user_token(),
+//         ts as *const u8,
+//         core::mem::size_of::<TimeVal>(),
+//     );
+//     let us = get_time_us();
+//     let time_val = TimeVal {
+//         sec: us / 1_000_000,
+//         usec: us % 1_000_000,
+//     };
+//     let mut time_val_ptr = &time_val as *const _ as *const u8;
+//     for buffer in buffers {
+//         unsafe {
+//             time_val_ptr.copy_to(buffer.as_mut_ptr(), buffer.len());
+//             time_val_ptr = time_val_ptr.add(buffer.len());
+//         }
+//     }
+//     0
+// }
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
@@ -76,6 +97,9 @@ pub fn sys_get_time(user_ptr: *mut TimeVal, _tz: usize) -> isize {
         sec: us / 1_000_000,
         usec: us % 1_000_000,
     };
+    // 优化点：可以直接使用translated_byte_buffer，获取到mut的切片
+    // 指针转换为 *const _ as *const u8后可以直接copy_to
+    // 参考上面，尤予阳老师解答给的方案。L70
     write_to_user_space_ptr(&info, user_ptr)
 }
 
